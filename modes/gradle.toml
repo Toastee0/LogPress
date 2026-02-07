@@ -1,0 +1,20 @@
+# Gradle / Android build mode
+
+[mode]
+name = "gradle"
+description = "Gradle / Android build system"
+
+[detection]
+signatures = ["BUILD SUCCESSFUL", "BUILD FAILED", "> Task :", "Downloading https://services.gradle.org", "gradle", "CONFIGURE SUCCESSFUL"]
+
+[dedup]
+strip_patterns = ["\"[^\"]*\"", "0x[0-9a-f]+", "[0-9]+ms", "[0-9]+s"]
+
+[segments]
+phase_markers = ["> Task :", "BUILD SUCCESSFUL", "BUILD FAILED", "CONFIGURE SUCCESSFUL"]
+block_triggers = ["FAILURE:", "error:", "warning:", "> Could not", "What went wrong"]
+
+[interest]
+keywords = ["FAILURE", "UP-TO-DATE", "NO-SOURCE", "SKIPPED", "compileJava", "compileKotlin", "processResources"]
+error_patterns = ["error:", "FAILURE:", "> Could not resolve", "Execution failed for task", "What went wrong"]
+warning_patterns = ["warning:", "w:"]

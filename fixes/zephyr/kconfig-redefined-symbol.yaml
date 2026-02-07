@@ -1,0 +1,13 @@
+pattern: "Redefined symbol"
+regex: "warning:.*CONFIG_.*redefined"
+tags: [zephyr, kconfig]
+fix: |
+  A Kconfig symbol is being defined in multiple places.
+  Check for duplicate CONFIG_ definitions in:
+  1. prj.conf
+  2. Board-specific .conf overlays
+  3. CMakeLists.txt set(CONFIG_...) calls
+  Remove the duplicate definition, keeping only the one
+  in the most specific location (overlay > prj.conf > defaults).
+context: "Common when merging Kconfig fragments from multiple samples"
+severity: warning

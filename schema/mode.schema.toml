@@ -1,0 +1,76 @@
+# Mode File Schema
+# This defines the structure of a valid logparse mode TOML file.
+# Mode files live in modes/*.toml
+
+# ============================================================
+# [mode] — Required section
+# ============================================================
+
+[mode]
+# name: string, required
+# Short identifier for the mode (used with --mode flag)
+# Example: "zephyr", "gradle", "pytest"
+name = "example"
+
+# description: string, required
+# Human-readable description of what this mode covers
+description = "Example build system mode"
+
+# ============================================================
+# [detection] — Required section
+# ============================================================
+
+[detection]
+# signatures: string array, required
+# Strings to look for in the first 50 lines of a log to auto-detect
+# this mode. More signatures = more confident detection.
+# An empty array means this mode won't auto-detect (useful for generic).
+signatures = ["BUILD", "make"]
+
+# ============================================================
+# [dedup] — Optional section
+# ============================================================
+
+[dedup]
+# strip_patterns: string array, optional
+# Regex patterns (tiny-regex-c syntax) to remove from lines before
+# hashing for deduplication. Common patterns:
+#   - Quoted strings: "\"[^\"]*\""
+#   - Hex values: "0x[0-9a-f]+"
+#   - Absolute paths: "/home/[^ ]+"
+#   - Timestamps: "[0-9]+\\.[0-9]+s"
+strip_patterns = ["\"[^\"]*\"", "0x[0-9a-f]+"]
+
+# ============================================================
+# [segments] — Optional section
+# ============================================================
+
+[segments]
+# phase_markers: string array, optional
+# Strings that indicate a build phase boundary.
+# When found, a new segment starts.
+phase_markers = ["Configuring", "Compiling", "Linking"]
+
+# block_triggers: string array, optional
+# Strings that trigger a new segment when found mid-block.
+# Used to isolate error/warning blocks.
+block_triggers = ["error:", "warning:", "FAILED"]
+
+# ============================================================
+# [interest] — Optional section
+# ============================================================
+
+[interest]
+# keywords: string array, optional
+# Strings that boost a segment's interest score when found.
+# Used for build-system-specific important terms.
+keywords = ["FAILED", "undefined"]
+
+# error_patterns: string array, optional
+# Patterns that classify a line as an error.
+# Checked before generic fallbacks.
+error_patterns = ["error:", "fatal:", "FAILED"]
+
+# warning_patterns: string array, optional
+# Patterns that classify a line as a warning.
+warning_patterns = ["warning:"]

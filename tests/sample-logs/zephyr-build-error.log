@@ -1,0 +1,64 @@
+-- west build: making build dir /home/user/project/build
+-- Found Zephyr base: /home/user/zephyrproject/zephyr
+Loading Kconfig defaults
+-- Found toolchain: zephyr 0.16.4
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/user/project/build
+[1/94] Compiling C object zephyr/CMakeFiles/zephyr.dir/kernel/init.c.obj
+[2/94] Compiling C object zephyr/CMakeFiles/zephyr.dir/kernel/thread.c.obj
+[3/94] Compiling C object zephyr/CMakeFiles/zephyr.dir/kernel/sched.c.obj
+[4/94] Compiling C object zephyr/CMakeFiles/zephyr.dir/drivers/gpio.c.obj
+[5/94] Compiling C object zephyr/CMakeFiles/zephyr.dir/drivers/i2c.c.obj
+[6/94] Compiling C object zephyr/CMakeFiles/zephyr.dir/drivers/spi.c.obj
+[7/94] Compiling C object zephyr/CMakeFiles/zephyr.dir/drivers/uart.c.obj
+[8/94] Compiling C object zephyr/CMakeFiles/zephyr.dir/subsys/logging.c.obj
+[9/94] Compiling C object zephyr/CMakeFiles/zephyr.dir/subsys/shell.c.obj
+[10/94] Compiling C object zephyr/CMakeFiles/zephyr.dir/lib/libc/minimal.c.obj
+warning: unused variable 'ctx' in sensor_hub.c
+[11/94] Compiling C object zephyr/CMakeFiles/zephyr.dir/app/sensor_hub.c.obj
+warning: unused variable 'ctx' in sensor_hub.c
+[12/94] Compiling C object zephyr/CMakeFiles/zephyr.dir/app/main.c.obj
+warning: unused variable 'ctx' in sensor_hub.c
+[13/94] Compiling C object zephyr/CMakeFiles/zephyr.dir/app/ble_service.c.obj
+warning: unused variable 'ctx' in sensor_hub.c
+[14/94] Compiling C object zephyr/CMakeFiles/zephyr.dir/app/config.c.obj
+warning: unused variable 'ctx' in sensor_hub.c
+note: in expansion of macro 'DT_INST_FOREACH_STATUS_OKAY'
+note: in expansion of macro 'DT_INST_FOREACH_STATUS_OKAY'
+note: in expansion of macro 'DT_INST_FOREACH_STATUS_OKAY'
+[15/94] Compiling C object zephyr/CMakeFiles/zephyr.dir/app/display.c.obj
+warning: unused variable 'ctx' in sensor_hub.c
+warning: unused variable 'ctx' in sensor_hub.c
+warning: unused variable 'ctx' in sensor_hub.c
+note: in expansion of macro 'DT_INST_FOREACH_STATUS_OKAY'
+note: in expansion of macro 'DT_INST_FOREACH_STATUS_OKAY'
+[16/94] Compiling C object zephyr/CMakeFiles/zephyr.dir/app/led.c.obj
+warning: unused variable 'ctx' in sensor_hub.c
+warning: unused variable 'ctx' in sensor_hub.c
+note: in expansion of macro 'DT_INST_FOREACH_STATUS_OKAY'
+[17/94] Compiling C object zephyr/CMakeFiles/zephyr.dir/app/battery.c.obj
+warning: overflow in implicit constant conversion
+warning: overflow in implicit constant conversion
+[18/94] Compiling C object zephyr/CMakeFiles/zephyr.dir/app/power.c.obj
+[19/94] Processing devicetree overlays
+/home/user/project/build/zephyr/zephyr.dts:847:
+  node '/soc/i2c@40003000/sensor@44' depends on undefined node 'ord,3'
+  Devicetree node reference error at line 847
+  Check overlay file for correct node references
+  Base DTS: /home/user/zephyrproject/zephyr/boards/arm/nrf52840dk/nrf52840dk.dts
+  Overlay: /home/user/project/boards/nrf52840dk.overlay
+  The referenced ordinal 'ord,3' does not exist in the resolved tree
+
+error: devicetree resolution failed
+
+[20/94] Skipping remaining compilation due to error
+ninja: build stopped: subcommand failed.
+
+Memory region         Used    Size   %Used
+  FLASH:            248312  1048576  23.68%
+  RAM:               65432   262144  24.96%
+  IDT_LIST:              0    2048   0.00%
+
+FAILED: build completed with errors
+Total time: 45.2s

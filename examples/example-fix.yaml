@@ -1,0 +1,15 @@
+# Example fix entry for logfix
+# Copy this to fixes/<tag>/<slug>.yaml and customize
+
+pattern: "depends on undefined node 'ord,"
+regex: "node '.+' depends on undefined node"
+tags: [zephyr, devicetree, nordic]
+fix: |
+  Missing or mismatched node reference in devicetree overlay.
+  Check that the overlay file references nodes that exist in the
+  base board DTS. Common cause: pin numbering changed between
+  board revisions or SoC families (e.g., nRF52840 -> nRF54L15).
+context: "Hit this migrating nRF52840 overlays to nRF54L15"
+resolved: 2025-01-14
+commit_ref: "abc123f"
+severity: error

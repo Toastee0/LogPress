@@ -1,0 +1,31 @@
+# Example mode file for logparse
+# Copy this to modes/<name>.toml and customize
+
+[mode]
+name = "mybuildsystem"
+description = "My custom build system"
+
+[detection]
+# Strings to look for in the first 50 lines of a log
+signatures = ["MyBuild v", "Starting build pipeline"]
+
+[dedup]
+# Regex patterns to strip before hashing (for deduplication)
+strip_patterns = ["\"[^\"]*\"", "0x[0-9a-f]+", "/home/[^ ]+"]
+
+[segments]
+# Strings that mark build phase boundaries
+phase_markers = ["== Configuration ==", "== Compilation ==", "== Linking ==", "== Done =="]
+
+# Strings that trigger a new segment when found
+block_triggers = ["error:", "warning:", "FAILED", "Exception"]
+
+[interest]
+# Keywords that boost a segment's interest score
+keywords = ["FAILED", "undefined", "missing", "cannot find"]
+
+# Patterns that classify a line as an error
+error_patterns = ["error:", "fatal:", "FAILED", "Exception"]
+
+# Patterns that classify a line as a warning
+warning_patterns = ["warning:", "WARN:", "deprecated"]

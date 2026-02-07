@@ -1,0 +1,51 @@
+# Fix Entry Schema
+# This defines the structure of a valid logfix fix entry YAML file.
+# Fix files live in fixes/<tag>/<slug>.yaml
+
+# ============================================================
+# Required fields
+# ============================================================
+
+# pattern: string, required
+#   The shortest unique substring that identifies the error.
+#   Strip paths, line numbers, and hex values.
+#   Example: "depends on undefined node 'ord,"
+pattern: "example error pattern"
+
+# tags: array, required
+#   At least one tag. First tag determines subdirectory.
+#   Common tags: zephyr, devicetree, nordic, cmake, gradle, python
+tags: [example, demo]
+
+# fix: string or block scalar, required
+#   The fix description — actionable steps to resolve the error.
+#   Use block scalar (|) for multiline text.
+fix: |
+  Description of how to fix this error.
+  Step 1: Do this
+  Step 2: Do that
+
+# ============================================================
+# Optional fields
+# ============================================================
+
+# regex: string, optional
+#   A regex pattern for more precise matching.
+#   Tested against raw error text. If it matches, confidence = 0.9
+regex: "example.*pattern"
+
+# context: string, optional
+#   When/why this error was encountered. Helps future debugging.
+context: "Hit this when doing X on project Y"
+
+# severity: string, optional
+#   "error" or "warning". Defaults to "error" if omitted.
+severity: error
+
+# resolved: string, optional
+#   Date when this fix was confirmed working. Format: YYYY-MM-DD
+resolved: 2025-01-01
+
+# commit_ref: string, optional
+#   Git commit that fixed the issue.
+commit_ref: "abc123f"

@@ -1,0 +1,20 @@
+# Raw CMake mode (not west-wrapped)
+
+[mode]
+name = "cmake"
+description = "Raw CMake / Make / Ninja build system"
+
+[detection]
+signatures = ["-- Configuring", "-- Generating", "cmake", "CMake Error", "-- Build files have been written", "-- Found"]
+
+[dedup]
+strip_patterns = ["\"[^\"]*\"", "0x[0-9a-f]+", "/home/[^ ]+", "/usr/[^ ]+"]
+
+[segments]
+phase_markers = ["-- Configuring done", "-- Generating done", "-- Build files", "Scanning dependencies", "Linking"]
+block_triggers = ["error:", "warning:", "CMake Error", "CMake Warning"]
+
+[interest]
+keywords = ["find_package", "target_link_libraries", "add_executable", "add_library", "NOT FOUND", "REQUIRED"]
+error_patterns = ["error:", "fatal:", "CMake Error", "undefined reference", "No rule to make target"]
+warning_patterns = ["warning:", "CMake Warning", "CMake Deprecation Warning"]

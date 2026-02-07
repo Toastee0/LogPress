@@ -1,0 +1,20 @@
+# Zephyr RTOS / west build system mode
+
+[mode]
+name = "zephyr"
+description = "Zephyr RTOS / west / Nordic SDK build system"
+
+[detection]
+signatures = ["west build", "-- Found Zephyr", "ninja: build", "-- Found toolchain", "Zephyr version:", "Loading Kconfig"]
+
+[dedup]
+strip_patterns = ["\"[^\"]*\"", "0x[0-9a-f]+", "/home/[^ ]+", "/usr/[^ ]+", "C:\\\\[^ ]+"]
+
+[segments]
+phase_markers = ["Parsing Kconfig", "devicetree", "Linking", "-- Configuring done", "-- Generating done", "Memory region", "ninja: build stopped"]
+block_triggers = ["error:", "warning:", "Memory region", "undefined reference", "multiple definition"]
+
+[interest]
+keywords = ["ord,", "overlay", "CONFIG_", "FLASH:", "RAM:", "DT_", "pinctrl", "chosen", "compatible"]
+error_patterns = ["error:", "fatal:", "undefined reference", "multiple definition", "depends on undefined node", "ninja: build stopped"]
+warning_patterns = ["warning:", "note:"]

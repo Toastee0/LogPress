@@ -1,0 +1,16 @@
+pattern: "depends on undefined node 'ord,"
+regex: "node '.+' depends on undefined node 'ord,"
+tags: [zephyr, devicetree, nordic]
+fix: |
+  Missing or mismatched node reference in devicetree overlay.
+  The overlay file references a node ordinal that does not exist
+  in the base board DTS. Common causes:
+  1. Pin numbering changed between board revisions or SoC families
+  2. The overlay was written for a different board variant
+  3. The base DTS was updated but the overlay was not
+  Check the node path in the DTS output and verify the ordinal
+  exists. For Nordic chips, compare nRF52840 vs nRF54L15 pin maps.
+context: "Hit this migrating nRF52840 overlays to nRF54L15 for AI Quit hardware"
+resolved: 2025-01-14
+commit_ref: "abc123f"
+severity: error

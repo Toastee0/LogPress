@@ -4,63 +4,161 @@
 
 Stop feeding 12,000-line build logs into your context window. LogPilot compresses build output into token-efficient summaries that preserve everything that matters — errors, warnings, frequency anomalies, and coherent diagnostic blocks — while eliminating noise.
 
-## The Problem
+---
 
-When an AI coding agent hits a build failure, it reads the entire log. A typical Zephyr RTOS build produces 10,000–50,000 lines of output. Most of it is identical between builds. Your context window fills up with noise, and the agent burns tokens re-reading information that could be expressed in 300 lines.
+## For Claude Code — Why and How to Use This
 
-## The Solution
+### Why
 
-Three Unix-philosophy tools:
+When you encounter a build failure, your instinct is to read the entire log file. **Don't.** A typical Zephyr RTOS build produces 10,000–50,000 lines of output. Most of it is identical between builds — repeated compiler warnings, progress counters, boilerplate cmake output. Reading all of it wastes your context window on noise.
 
-| Tool | What It Does |
-|------|-------------|
-| **`logparse`** | Compresses a build log. Deduplicates repeated lines (showing `[×94]` counts), extracts coherent error/diagnostic blocks whole, and packs the most important content into a configurable token budget. |
-| **`logexplore`** | Analyzes unfamiliar log formats. Shows phase boundaries, frequency tables, and segment structure so you can create new `logparse` modes. |
-| **`logfix`** | Matches errors against a flat-file knowledge base of past fixes. Grows automatically as you resolve issues. |
+LogPilot gives you a **300-line semantic summary** that preserves:
+- Every error and warning block (complete, not truncated)
+- Frequency counts for repeated lines (`[x94]` instead of 94 copies)
+- Tabular data like memory maps
+- The final build result (tail)
 
-## Quick Start
+### How — The Build Failure Workflow
+
+**Always follow this sequence when a build fails:**
 
 ```bash
-# Clone the repo
-git clone https://github.com/toastee0/logpilot.git
-cd logpilot
+# 1. Compress the log (auto-detects build system)
+logparse build.log
 
-# Compress a build log (auto-detects build system)
-bin/logparse build.log
+# 2. Check for known fixes
+logfix --query "the error pattern you see"
 
-# Explore an unfamiliar log
-bin/logexplore mystery-output.log
+# 3. If no known fix, diagnose and fix the issue yourself
 
-# Check errors against known fixes
-bin/logparse build.log | bin/logfix --check
+# 4. AFTER your fix works, record it for next time
+logfix --add --tags zephyr,devicetree
 ```
 
-## For Claude Code Users
+**Key commands:**
 
-Drop this repo into your project (or symlink the `claude.md`). Claude Code will automatically use LogPilot instead of reading raw build logs. See `claude.md` for the full agent integration spec.
+```bash
+# Force a specific build system mode and token budget
+logparse build.log --mode zephyr --budget 400
 
-## For Claude.ai Users
+# Pipe directly from a build command
+west build -b nrf52840dk 2>&1 | logparse --mode zephyr
 
-The `SKILL.md` file allows Claude's web interface to use these tools when they're available on the system.
+# Search for keywords you care about
+logparse build.log --keywords "ord, overlay, pinctrl"
 
-## Self-Extending
+# JSON output for programmatic use
+logparse build.log --json
 
-Every tool supports `--help agent` which returns machine-readable instructions for adding new build system modes, fix database entries, and format signatures. The tools teach your AI agent how to improve them.
+# Explore an unfamiliar log format before creating a mode
+logexplore mystery-output.log --show-segments
 
-## Build System Modes
+# Generate a draft mode TOML from a sample log
+logexplore build.log --suggest-mode > modes/new-format.toml
 
-Shipped modes: `zephyr`, `gradle`, `pytest`, `cmake`, `generic`
+# Check all fix entries are valid
+logfix --validate
 
-Add your own by creating a TOML file in `modes/`. See `schema/mode.schema.toml` for the format, or let `logexplore --suggest-mode` generate a draft from a sample log.
+# See database stats
+logfix --stats
+```
 
-## Fix Database
+### Self-Extending
 
-Human-readable YAML files in `fixes/`. Each entry maps an error pattern to an actionable fix. The database is git-tracked and grows with every resolved build issue.
+Every tool supports `--help agent` which returns machine-readable instructions for adding new build system modes, fix database entries, and format signatures. **Use these when you need to extend the toolkit:**
 
-## Requirements
+```bash
+logparse --help agent   # How to add new modes
+logexplore --help agent # How to improve segment detection
+logfix --help agent     # How to add new fix entries
+```
 
-- Python 3.10+
-- No external dependencies (stdlib only, with optional `pyyaml`)
+### What's Available
+
+| Tool | Purpose |
+|------|---------|
+| `logparse` | Compress a build log into a token-efficient summary |
+| `logexplore` | Discover structure in unfamiliar log formats |
+| `logfix` | Match errors against a knowledge base of past fixes |
+
+**Shipped modes:** `zephyr`, `gradle`, `pytest`, `cmake`, `generic`
+
+**Fix database:** YAML files in `fixes/` — grows with every resolved build issue.
+
+---
+
+## Building from Source
+
+LogPilot is implemented in C11 with no external dependencies (all vendored). It builds on Windows, Linux, and macOS.
+
+### Requirements
+
+- CMake 3.16+
+- A C11 compiler (MSVC, GCC, or Clang)
+- Ninja (recommended) or Make
+
+### Build
+
+```bash
+# Configure
+cmake -B build -G Ninja
+
+# Build
+cmake --build build
+
+# Run tests (18 integration tests)
+cd build && ctest --output-on-failure && cd ..
+```
+
+The executables are built to `build/logparse`, `build/logexplore`, and `build/logfix` (`.exe` on Windows).
+
+### Install (optional)
+
+```bash
+cmake --install build --prefix /usr/local
+```
+
+---
+
+## Project Structure
+
+```
+logpilot/
+├── claude.md              ← Claude Code integration spec (read this first)
+├── SKILL.md               ← Claude.ai skill variant
+├── CMakeLists.txt         ← Build system
+├── src/
+│   ├── logparse.c         ← Main compression tool
+│   ├── logexplore.c       ← Structure discovery tool
+│   ├── logfix.c           ← Fix memory lookup/writer
+│   └── lib/               ← Shared core library (8 modules)
+│       ├── util.c/h       ← Strings, file I/O, platform shims
+│       ├── token.c/h      ← Token estimation (~4 chars/token)
+│       ├── dedup.c/h      ← FNV-1a hashing, frequency table
+│       ├── segment.c/h    ← Block detection, type classification
+│       ├── score.c/h      ← Interest scoring (keywords, frequency, type)
+│       ├── budget.c/h     ← Greedy knapsack packing
+│       ├── mode.c/h       ← TOML mode loader, auto-detect
+│       └── fix.c/h        ← YAML fix database, fuzzy matching
+├── modes/                 ← Build system mode definitions (TOML)
+├── fixes/                 ← Fix knowledge base (YAML)
+├── schema/                ← Schema docs for modes and fixes
+├── examples/              ← Template mode and fix files
+├── tests/
+│   ├── CMakeLists.txt     ← 18 CTest integration tests
+│   └── sample-logs/       ← Sample build logs for testing
+└── vendor/                ← Vendored dependencies (tiny-regex-c)
+```
+
+## Architecture
+
+The `logparse` pipeline:
+
+1. **Auto-detect mode** — Sniff first 50 lines for signatures (`west build`, `BUILD SUCCESSFUL`, `pytest`, etc.)
+2. **Deduplicate** — FNV-1a hash each normalized line, collapse repeats with counts
+3. **Segment** — Identify coherent blocks by blank lines, indent shifts, phase markers
+4. **Score** — Rate each segment: errors (+10), warnings (+5), keyword matches (+3), frequency outliers (+2)
+5. **Pack** — Greedy knapsack: errors always included, fill remaining budget by score
 
 ## Philosophy
 
@@ -68,12 +166,10 @@ Human-readable YAML files in `fixes/`. Each entry maps an error pattern to an ac
 - Flat files over databases
 - Git-tracked knowledge
 - Self-documenting for both humans and LLMs
-- Simple enough to debug, powerful enough to save hours
+- Zero external dependencies — vendored C, builds anywhere
 
 ## License
 
 MIT
-
----
 
 *Built by [digitaltoaster](https://youtube.com/@digitaltoaster) for the embedded systems community.*

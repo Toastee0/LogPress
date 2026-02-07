@@ -1,0 +1,22 @@
+# Generic fallback mode — catches everything
+# Used when no build system is auto-detected
+
+[mode]
+name = "generic"
+description = "Generic fallback for unknown log formats"
+
+[detection]
+# No signatures — this mode is the fallback when nothing else matches
+signatures = []
+
+[dedup]
+strip_patterns = ["\"[^\"]*\"", "0x[0-9a-f]+", "[0-9]+\\.[0-9]+s"]
+
+[segments]
+phase_markers = []
+block_triggers = ["error:", "warning:", "FAILED", "Error:", "ERROR"]
+
+[interest]
+keywords = ["error", "warning", "FAILED", "undefined", "fatal"]
+error_patterns = ["error:", "fatal:", "FAILED", "undefined reference", "cannot find"]
+warning_patterns = ["warning:", "Warning:", "WARN"]

@@ -1,0 +1,20 @@
+# Python test output mode
+
+[mode]
+name = "pytest"
+description = "Python test output (pytest / unittest)"
+
+[detection]
+signatures = ["pytest", "PASSED", "FAILED", "ERROR", "collected", "===", "test session starts"]
+
+[dedup]
+strip_patterns = ["\"[^\"]*\"", "0x[0-9a-f]+", "line [0-9]+"]
+
+[segments]
+phase_markers = ["===", "---", "collected", "test session starts"]
+block_triggers = ["FAILED", "ERROR", "AssertionError", "Traceback", "raise"]
+
+[interest]
+keywords = ["FAILED", "ERROR", "PASSED", "assert", "fixture", "conftest", "parametrize"]
+error_patterns = ["FAILED", "ERROR", "AssertionError", "Traceback", "raise", "ModuleNotFoundError"]
+warning_patterns = ["PytestWarning", "DeprecationWarning", "warning"]
