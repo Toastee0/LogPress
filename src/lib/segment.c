@@ -80,6 +80,27 @@ bool lp_is_build_progress(const char *line) {
     return true;
 }
 
+bool lp_is_compiler_command(const char *line) {
+    /* Compiler/linker invocations are long lines with many flags.
+       Heuristic: line is >300 chars and contains a compiler executable. */
+    size_t len = strlen(line);
+    if (len < 300) return false;
+    /* Look for common compiler/linker executables */
+    if (strstr(line, "gcc") || strstr(line, "g++") ||
+        strstr(line, "clang") || strstr(line, "cl.exe") ||
+        strstr(line, "/cc ") || strstr(line, "/ld ") ||
+        strstr(line, "arm-zephyr-eabi") || strstr(line, "arm-none-eabi") ||
+        strstr(line, "xtensa-") || strstr(line, "riscv")) {
+        /* Confirm: has multiple flag-like tokens */
+        if (strstr(line, " -D") || strstr(line, " -I") ||
+            strstr(line, " -f") || strstr(line, " -W") ||
+            strstr(line, " /D") || strstr(line, " /I")) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool lp_is_boilerplate(const char *line, const struct lp_mode *mode) {
     if (!mode || !mode->boilerplate_patterns) return false;
     for (size_t i = 0; i < mode->boilerplate_count; i++) {

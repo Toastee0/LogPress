@@ -64,4 +64,7 @@ bool lp_is_build_progress(const char *line);
 /* Check if a line matches a boilerplate pattern */
 bool lp_is_boilerplate(const char *line, const struct lp_mode *mode);
 
+/* Check if a line is a compiler/linker command invocation (long noise) */
+bool lp_is_compiler_command(const char *line);
+
 #endif /* LP_SEGMENT_H */

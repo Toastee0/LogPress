@@ -421,6 +421,7 @@ static void output_text(FILE *out, const logparse_args *args,
         for (size_t l = 0; l < seg->line_count; l++) {
             if (lp_is_build_progress(seg->lines[l])) continue;
             if (lp_is_boilerplate(seg->lines[l], mode)) continue;
+            if (lp_is_compiler_command(seg->lines[l])) continue;
             output_lines++;
         }
     }
@@ -435,6 +436,8 @@ static void output_text(FILE *out, const logparse_args *args,
     /* --- Header --- */
     fprintf(out, "[LOGPARSE] mode: %s | %zu lines -> ~%zu lines (%.1f%% reduction)\n",
             mode_name, la->count, output_lines, reduction);
+    if (args->input_file)
+        fprintf(out, "[SOURCE] %s\n", args->input_file);
     fprintf(out, "[STATS] %zu errors | %zu warnings\n",
             real_error_count, warning_count);
     fprintf(out, "\n");
@@ -542,6 +545,7 @@ static void output_text(FILE *out, const logparse_args *args,
             /* Skip noise lines within segments */
             if (lp_is_build_progress(line)) continue;
             if (lp_is_boilerplate(line, mode)) continue;
+            if (lp_is_compiler_command(line)) continue;
             if (seg->type != LP_SEG_ERROR && seg->type != LP_SEG_WARNING) {
                 if (lp_is_blank(line)) continue;
             }
