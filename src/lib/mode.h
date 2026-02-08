@@ -25,6 +25,9 @@ typedef struct lp_mode {
     size_t error_count;
     char **warning_patterns;
     size_t warning_count;
+    char  *progress_pattern;  /* Regex for build progress lines (e.g. [N/M]) */
+    char **boilerplate_patterns;
+    size_t boilerplate_count;
 } lp_mode;
 
 /* Load a single mode from a TOML file. Returns NULL on error. */

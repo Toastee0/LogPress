@@ -15,6 +15,8 @@ typedef enum {
     LP_SEG_INFO,
     LP_SEG_DATA,      /* Tabular data (memory maps, test summaries) */
     LP_SEG_PHASE,     /* Phase boundary marker */
+    LP_SEG_BUILD_PROGRESS, /* Build step lines: [N/M] Building/Linking/Generating */
+    LP_SEG_BOILERPLATE,   /* CMake/west config lines — zero diagnostic value */
     LP_SEG_NORMAL
 } lp_seg_type;
 
@@ -55,5 +57,11 @@ bool lp_is_blank(const char *line);
 
 /* Detect if lines form tabular data (consistent column alignment) */
 bool lp_is_tabular(const char **lines, size_t count);
+
+/* Check if a line is a ninja/cmake build progress line like [N/M] Building... */
+bool lp_is_build_progress(const char *line);
+
+/* Check if a line matches a boilerplate pattern */
+bool lp_is_boilerplate(const char *line, const struct lp_mode *mode);
 
 #endif /* LP_SEGMENT_H */

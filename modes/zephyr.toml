@@ -8,13 +8,75 @@ description = "Zephyr RTOS / west / Nordic SDK build system"
 signatures = ["west build", "-- Found Zephyr", "ninja: build", "-- Found toolchain", "Zephyr version:", "Loading Kconfig"]
 
 [dedup]
-strip_patterns = ["\"[^\"]*\"", "0x[0-9a-f]+", "/home/[^ ]+", "/usr/[^ ]+", "C:\\\\[^ ]+"]
+strip_patterns = ['"[^"]*"', "0x[0-9a-f]+", "/home/[^ ]+", "/usr/[^ ]+", "C:\\\\[^ ]+"]
 
 [segments]
-phase_markers = ["Parsing Kconfig", "devicetree", "Linking", "-- Configuring done", "-- Generating done", "Memory region", "ninja: build stopped"]
+phase_markers = ["Parsing Kconfig", "devicetree", "Linking", "-- Configuring done", "-- Generating done", "Memory region", "ninja: build stopped", "FAILED:"]
 block_triggers = ["error:", "warning:", "Memory region", "undefined reference", "multiple definition"]
+progress_pattern = "^\\[\\d+/\\d+\\]"
+boilerplate_patterns = [
+    "-- Found Python3:",
+    "-- Cache files will be written to:",
+    "-- Found west (found",
+    "Loading Zephyr module",
+    "Loading Zephyr default modules",
+    "Parsing C:/ncs/",
+    "Parsing M:/",
+    "Loaded configuration",
+    "Merged configuration",
+    "Configuration saved to",
+    "Kconfig header saved to",
+    "-- Found host-tools:",
+    "-- Found toolchain:",
+    "-- Could NOT find Dtc",
+    "Hint: The project() command",
+    "-- Found BOARD.dts:",
+    "-- Found GnuLd:",
+    "-- The C compiler identification",
+    "-- The CXX compiler identification",
+    "-- The ASM compiler identification",
+    "-- Found assembler:",
+    "-- Found gen_kobject_list:",
+    "-- Configuring done",
+    "-- Generating done",
+    "-- Build files have been written to:",
+    "-- Found partition manager static",
+    "-- west build: building application",
+    "-- west build: making build dir",
+    "-- west build: generating a build system",
+    "-- Generated zephyr.dts:",
+    "-- Generated pickled edt:",
+    "-- Generated devicetree_generated.h:",
+    "-- Application:",
+    "-- CMake version:",
+    "*******************************",
+    "* Running CMake for",
+    "Creating directories for",
+    "No download step for",
+    "No update step for",
+    "No patch step for",
+    "No configure step for",
+    "No install step for",
+    "Completed '",
+    "In file included from",
+    "FATAL ERROR: command exited",
+    "_sysbuild/sysbuild/images/",
+    "cmd.exe /C",
+    "cmake.exe -E true",
+    "cmake.EXE",
+    "Performing build step for"
+]
 
 [interest]
-keywords = ["ord,", "overlay", "CONFIG_", "FLASH:", "RAM:", "DT_", "pinctrl", "chosen", "compatible"]
+keywords = ["overlay", "CONFIG_", "FLASH:", "RAM:", "DT_", "pinctrl", "chosen", "compatible", "uf2", "merged.hex"]
 error_patterns = ["error:", "fatal:", "undefined reference", "multiple definition", "depends on undefined node", "ninja: build stopped"]
 warning_patterns = ["warning:", "note:"]
+
+# Lines to extract into the summary header (key=regex with capture group)
+[summary]
+board_pattern = "-- Board: (.+)"
+zephyr_version_pattern = "-- Zephyr version: ([^ ]+)"
+toolchain_pattern = "-- Found toolchain: (.+)"
+overlay_pattern = "-- Found devicetree overlay: (.+)"
+memory_pattern = "(FLASH|RAM|IDT_LIST):\\s+(.+)"
+output_pattern = "Wrote (\\d+ bytes to .+)"

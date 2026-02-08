@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <ctype.h>
 
 #include "util.h"
 #include "mode.h"
@@ -195,17 +196,197 @@ static void print_json_string(FILE *out, const char *s) {
 
 static const char *seg_type_name(lp_seg_type t) {
     switch (t) {
-        case LP_SEG_ERROR:   return "error";
-        case LP_SEG_WARNING: return "warning";
-        case LP_SEG_INFO:    return "info";
-        case LP_SEG_DATA:    return "data";
-        case LP_SEG_PHASE:   return "phase";
-        case LP_SEG_NORMAL:  return "block";
+        case LP_SEG_ERROR:          return "error";
+        case LP_SEG_WARNING:        return "warning";
+        case LP_SEG_INFO:           return "info";
+        case LP_SEG_DATA:           return "data";
+        case LP_SEG_PHASE:          return "phase";
+        case LP_SEG_BUILD_PROGRESS: return "build";
+        case LP_SEG_BOILERPLATE:    return "boilerplate";
+        case LP_SEG_NORMAL:         return "block";
     }
     return "unknown";
 }
 
+/* ---- Summary fact extraction ---- */
+
+typedef struct {
+    char board[256];
+    char zephyr_version[64];
+    char toolchain[256];
+    char overlay[512];
+    char memory_flash[128];
+    char memory_ram[128];
+    char output_file[256];
+    size_t total_build_steps;
+    size_t max_build_step;
+    bool build_failed;
+} build_summary;
+
+static void extract_summary(build_summary *s, line_array *la) {
+    memset(s, 0, sizeof(*s));
+
+    for (size_t i = 0; i < la->count; i++) {
+        const char *line = la->lines[i];
+
+        /* Board */
+        if (s->board[0] == '\0') {
+            const char *p = strstr(line, "-- Board: ");
+            if (p) {
+                p += 10;
+                const char *end = p;
+                while (*end && *end != '\n' && *end != '\r') end++;
+                size_t len = (size_t)(end - p);
+                if (len >= sizeof(s->board)) len = sizeof(s->board) - 1;
+                memcpy(s->board, p, len);
+                s->board[len] = '\0';
+            }
+        }
+
+        /* Zephyr version */
+        if (s->zephyr_version[0] == '\0') {
+            const char *p = strstr(line, "-- Zephyr version: ");
+            if (p) {
+                p += 19;
+                const char *end = p;
+                while (*end && *end != ' ' && *end != '\n') end++;
+                size_t len = (size_t)(end - p);
+                if (len >= sizeof(s->zephyr_version)) len = sizeof(s->zephyr_version) - 1;
+                memcpy(s->zephyr_version, p, len);
+                s->zephyr_version[len] = '\0';
+            }
+        }
+
+        /* Overlay */
+        if (s->overlay[0] == '\0') {
+            const char *p = strstr(line, "-- Found devicetree overlay: ");
+            if (p) {
+                p += 29;
+                /* Shorten: just keep filename relative to project */
+                const char *last_slash = p;
+                const char *end = p;
+                while (*end && *end != '\n' && *end != '\r') end++;
+                /* Find last path separator after common project root indicators */
+                const char *short_name = p;
+                const char *boards = strstr(p, "boards/");
+                if (boards) short_name = boards;
+                size_t len = (size_t)(end - short_name);
+                if (len >= sizeof(s->overlay)) len = sizeof(s->overlay) - 1;
+                memcpy(s->overlay, short_name, len);
+                s->overlay[len] = '\0';
+                (void)last_slash;
+            }
+        }
+
+        /* Toolchain version - extract just the compiler */
+        if (s->toolchain[0] == '\0') {
+            const char *p = strstr(line, "The C compiler identification is ");
+            if (p) {
+                p += 33;
+                const char *end = p;
+                while (*end && *end != '\n' && *end != '\r') end++;
+                size_t len = (size_t)(end - p);
+                if (len >= sizeof(s->toolchain)) len = sizeof(s->toolchain) - 1;
+                memcpy(s->toolchain, p, len);
+                s->toolchain[len] = '\0';
+            }
+        }
+
+        /* Memory: FLASH */
+        if (s->memory_flash[0] == '\0') {
+            const char *p = strstr(line, "FLASH:");
+            if (p && strstr(line, "Used Size")) {
+                /* This is the header line, skip */
+            } else if (p) {
+                p += 6;
+                while (*p == ' ') p++;
+                const char *end = p;
+                while (*end && *end != '\n' && *end != '\r') end++;
+                size_t len = (size_t)(end - p);
+                if (len >= sizeof(s->memory_flash)) len = sizeof(s->memory_flash) - 1;
+                memcpy(s->memory_flash, p, len);
+                s->memory_flash[len] = '\0';
+                /* Trim trailing spaces */
+                while (len > 0 && s->memory_flash[len-1] == ' ') s->memory_flash[--len] = '\0';
+            }
+        }
+
+        /* Memory: RAM */
+        if (s->memory_ram[0] == '\0') {
+            const char *p = strstr(line, "RAM:");
+            if (p && !strstr(line, "Used Size")) {
+                p += 4;
+                while (*p == ' ') p++;
+                const char *end = p;
+                while (*end && *end != '\n' && *end != '\r') end++;
+                size_t len = (size_t)(end - p);
+                if (len >= sizeof(s->memory_ram)) len = sizeof(s->memory_ram) - 1;
+                memcpy(s->memory_ram, p, len);
+                s->memory_ram[len] = '\0';
+                while (len > 0 && s->memory_ram[len-1] == ' ') s->memory_ram[--len] = '\0';
+            }
+        }
+
+        /* Output file */
+        if (s->output_file[0] == '\0') {
+            const char *p = strstr(line, "Wrote ");
+            if (p && strstr(p, " bytes to ")) {
+                const char *end = p;
+                while (*end && *end != '\n' && *end != '\r') end++;
+                size_t len = (size_t)(end - p);
+                if (len >= sizeof(s->output_file)) len = sizeof(s->output_file) - 1;
+                memcpy(s->output_file, p, len);
+                s->output_file[len] = '\0';
+            }
+        }
+
+        /* Build step counts */
+        if (lp_is_build_progress(line)) {
+            const char *p = line;
+            while (*p && isspace((unsigned char)*p)) p++;
+            if (*p == '[') {
+                p++;
+                size_t current = (size_t)atoi(p);
+                while (*p && *p != '/') p++;
+                if (*p == '/') {
+                    p++;
+                    size_t total = (size_t)atoi(p);
+                    if (current > s->total_build_steps) s->total_build_steps = current;
+                    if (total > s->max_build_step) s->max_build_step = total;
+                }
+            }
+        }
+
+        /* Build failure */
+        if (lp_str_contains_ci(line, "ninja: build stopped") ||
+            (lp_str_contains(line, "FAILED:") && !lp_str_contains(line, "FAILED: _"))) {
+            s->build_failed = true;
+        }
+        if (lp_str_contains(line, "FATAL ERROR:")) {
+            s->build_failed = true;
+        }
+    }
+}
+
 /* ---- Output: plain text ---- */
+
+/* Check if an error segment contains only build-system wrapper noise */
+static bool is_wrapper_error(lp_segment *seg) {
+    if (seg->type != LP_SEG_ERROR) return false;
+    for (size_t l = 0; l < seg->line_count; l++) {
+        const char *ln = seg->lines[l];
+        if (strstr(ln, "ninja: build stopped") ||
+            strstr(ln, "FATAL ERROR:") ||
+            strstr(ln, "_sysbuild/sysbuild/images/") ||
+            strstr(ln, "cmd.exe /C") ||
+            strstr(ln, "cmake.exe --build") ||
+            strstr(ln, "cmake.EXE")) {
+            continue;  /* wrapper line */
+        }
+        return false;
+    }
+    return true;
+}
 
 static void output_text(FILE *out, const logparse_args *args,
                         const char *mode_name,
@@ -213,76 +394,164 @@ static void output_text(FILE *out, const logparse_args *args,
                         lp_dedup_table *dedup,
                         lp_segment *segs, size_t seg_count,
                         lp_budget_result *budget,
-                        size_t error_count, size_t warning_count) {
-    /* Stats header */
-    size_t compressed_lines = 0;
-    for (size_t i = 0; i < budget->count; i++)
-        compressed_lines += segs[budget->indices[i]].line_count;
+                        size_t error_count, size_t warning_count,
+                        const struct lp_mode *mode) {
+
+    (void)seg_count;
+
+    /* Extract summary facts from the full log */
+    build_summary summary;
+    extract_summary(&summary, la);
+
+    /* Count output lines — matches the actual filtering in the output loop */
+    size_t output_lines = 0;
+    size_t real_error_count = 0;
+    for (size_t i = 0; i < budget->count; i++) {
+        lp_segment *seg = &segs[budget->indices[i]];
+        if (seg->type == LP_SEG_BUILD_PROGRESS || seg->type == LP_SEG_BOILERPLATE)
+            continue;
+        if (is_wrapper_error(seg)) continue;
+
+        if (seg->type != LP_SEG_ERROR && seg->type != LP_SEG_WARNING) {
+            if (seg->score < 3.0f) continue;
+        }
+        if (seg->type == LP_SEG_ERROR) real_error_count++;
+
+        /* Count non-noise lines within the segment */
+        for (size_t l = 0; l < seg->line_count; l++) {
+            if (lp_is_build_progress(seg->lines[l])) continue;
+            if (lp_is_boilerplate(seg->lines[l], mode)) continue;
+            output_lines++;
+        }
+    }
+    /* Add summary header lines */
+    output_lines += 6;
 
     float reduction = la->count > 0
-        ? (1.0f - (float)compressed_lines / (float)la->count) * 100.0f
+        ? (1.0f - (float)output_lines / (float)la->count) * 100.0f
         : 0.0f;
+    if (reduction < 0.0f) reduction = 0.0f;
 
-    fprintf(out, "[LOGPARSE] mode: %s | %zu lines -> %zu lines (%.1f%% reduction)\n",
-            mode_name, la->count, compressed_lines, reduction);
-
-    /* Count unique repeated and frequency stats */
-    size_t sorted_count;
-    lp_dedup_entry **sorted = lp_dedup_sorted(dedup, &sorted_count);
-    size_t repeat_count = 0;
-    for (size_t i = 0; i < sorted_count; i++) {
-        if (sorted[i]->count > 1) repeat_count++;
-    }
-
-    fprintf(out, "[STATS] %zu unique repeated patterns | %zu error blocks | %zu warning segments\n",
-            repeat_count, error_count, warning_count);
-
-    /* Phase detection line */
-    bool has_phases = false;
-    for (size_t i = 0; i < seg_count; i++) {
-        if (segs[i].type == LP_SEG_PHASE) { has_phases = true; break; }
-    }
-    if (has_phases) {
-        fprintf(out, "[STATS] Build phases detected:");
-        for (size_t i = 0; i < seg_count; i++) {
-            if (segs[i].type == LP_SEG_PHASE && segs[i].line_count > 0) {
-                fprintf(out, " %s,", segs[i].lines[0]);
-            }
-        }
-        fprintf(out, "\n");
-    }
-
+    /* --- Header --- */
+    fprintf(out, "[LOGPARSE] mode: %s | %zu lines -> ~%zu lines (%.1f%% reduction)\n",
+            mode_name, la->count, output_lines, reduction);
+    fprintf(out, "[STATS] %zu errors | %zu warnings\n",
+            real_error_count, warning_count);
     fprintf(out, "\n");
 
-    /* Frequency table */
+    /* --- Build summary --- */
+    if (summary.board[0]) {
+        fprintf(out, "  Board: %s", summary.board);
+        if (summary.zephyr_version[0])
+            fprintf(out, " | Zephyr %s", summary.zephyr_version);
+        if (summary.toolchain[0])
+            fprintf(out, " | %s", summary.toolchain);
+        fprintf(out, "\n");
+    }
+    if (summary.overlay[0])
+        fprintf(out, "  Overlay: %s\n", summary.overlay);
+
+    /* Build steps summary */
+    if (summary.max_build_step > 0) {
+        if (error_count > 0 || summary.build_failed) {
+            fprintf(out, "  Build: FAILED at step %zu/%zu\n",
+                    summary.total_build_steps, summary.max_build_step);
+        } else {
+            fprintf(out, "  Build: %zu/%zu steps OK\n",
+                    summary.total_build_steps, summary.max_build_step);
+        }
+    }
+
+    /* Memory summary */
+    if (summary.memory_flash[0]) {
+        fprintf(out, "  FLASH: %s\n", summary.memory_flash);
+    }
+    if (summary.memory_ram[0]) {
+        fprintf(out, "  RAM:   %s\n", summary.memory_ram);
+    }
+    if (summary.output_file[0]) {
+        fprintf(out, "  Output: %s\n", summary.output_file);
+    }
+    fprintf(out, "\n");
+
+    /* --- Frequency table: only if genuinely interesting (3+ repeats) --- */
+    size_t sorted_count;
+    lp_dedup_entry **sorted = lp_dedup_sorted(dedup, &sorted_count);
     size_t freq_top = args->raw_freq ? sorted_count : DEFAULT_FREQ_TOP;
     if (freq_top > sorted_count) freq_top = sorted_count;
     size_t freq_shown = 0;
     for (size_t i = 0; i < freq_top; i++) {
-        if (sorted[i]->count <= 1 && !args->raw_freq) continue;
+        if (sorted[i]->count < 3 && !args->raw_freq) continue;
+        /* Skip boilerplate/progress noise */
+        if (lp_is_build_progress(sorted[i]->original)) continue;
+        if (lp_is_blank(sorted[i]->original)) continue;
+        /* Skip lines that are just decorative */
+        const char *trimmed = sorted[i]->original;
+        while (*trimmed == ' ' || *trimmed == '-' || *trimmed == '*') trimmed++;
+        if (*trimmed == '\0') continue;
         fprintf(out, "[FREQ x%zu] %s\n", sorted[i]->count, sorted[i]->original);
         freq_shown++;
     }
     if (freq_shown > 0) fprintf(out, "\n");
 
-    /* Packed segments */
+    /* --- Segments --- */
     for (size_t b = 0; b < budget->count; b++) {
         size_t si = budget->indices[b];
         lp_segment *seg = &segs[si];
 
-        fprintf(out, "[SEGMENT: %s] lines %zu-%zu",
-                seg_type_name(seg->type), seg->start_line + 1, seg->end_line + 1);
-        if (seg->label && strcmp(seg->label, seg_type_name(seg->type)) != 0)
-            fprintf(out, " (%s)", seg->label);
-        fprintf(out, "\n");
+        /* Skip build progress and boilerplate — already captured in summary */
+        if (seg->type == LP_SEG_BUILD_PROGRESS || seg->type == LP_SEG_BOILERPLATE)
+            continue;
+
+        /* Skip wrapper error segments (ninja/cmake build system noise) */
+        if (is_wrapper_error(seg)) continue;
+
+        /* For non-error/warning segments, only show if high-scoring and not
+           something we already captured in the summary */
+        if (seg->type != LP_SEG_ERROR && seg->type != LP_SEG_WARNING) {
+            if (seg->score < 3.0f) continue;
+            /* Skip segments whose content is already in the summary */
+            bool all_summarized = true;
+            for (size_t l = 0; l < seg->line_count; l++) {
+                const char *ln = seg->lines[l];
+                if (lp_is_blank(ln)) continue;
+                if (lp_is_boilerplate(ln, mode)) continue;
+                /* Already in summary? */
+                if (strstr(ln, "FLASH:") || strstr(ln, "RAM:") ||
+                    strstr(ln, "IDT_LIST:") || strstr(ln, "Used Size") ||
+                    strstr(ln, "Memory region") ||
+                    strstr(ln, "Wrote ") || strstr(ln, "Converted to uf2") ||
+                    strstr(ln, "Generating files from") ||
+                    strstr(ln, "merged.hex") ||
+                    lp_is_build_progress(ln)) {
+                    continue;
+                }
+                all_summarized = false;
+                break;
+            }
+            if (all_summarized) continue;
+        }
+
+        fprintf(out, "[%s] lines %zu-%zu\n",
+                seg_type_name(seg->type),
+                seg->start_line + 1, seg->end_line + 1);
 
         for (size_t l = 0; l < seg->line_count; l++) {
-            size_t line_num = seg->start_line + l;
             const char *line = seg->lines[l];
+
+            /* Skip noise lines within segments */
+            if (lp_is_build_progress(line)) continue;
+            if (lp_is_boilerplate(line, mode)) continue;
+            if (seg->type != LP_SEG_ERROR && seg->type != LP_SEG_WARNING) {
+                if (lp_is_blank(line)) continue;
+            }
+
+            /* Show dedup count for repeated lines */
             size_t line_len = strlen(line);
             uint64_t h = lp_fnv1a(line, line_len);
             size_t idx = (size_t)(h & (dedup->capacity - 1));
             size_t dup_count = 1;
+            size_t line_num = seg->start_line + l;
             while (dedup->buckets[idx].occupied) {
                 if (dedup->buckets[idx].hash == h &&
                     strcmp(dedup->buckets[idx].original, line) == 0) {
@@ -300,26 +569,6 @@ static void output_text(FILE *out, const logparse_args *args,
         fprintf(out, "\n");
     }
 
-    /* Tail */
-    if (!args->no_tail && la->count > 0) {
-        size_t tail_start = la->count > DEFAULT_TAIL_LINES
-                          ? la->count - DEFAULT_TAIL_LINES : 0;
-        bool tail_covered = false;
-        for (size_t b = 0; b < budget->count; b++) {
-            size_t si = budget->indices[b];
-            if (segs[si].end_line >= la->count - 1 &&
-                segs[si].start_line <= tail_start) {
-                tail_covered = true;
-                break;
-            }
-        }
-        if (!tail_covered) {
-            fprintf(out, "[TAIL: last %zu lines]\n", la->count - tail_start);
-            for (size_t i = tail_start; i < la->count; i++)
-                fprintf(out, "  %s\n", la->lines[i]);
-        }
-    }
-
     free(sorted);
 }
 
@@ -333,6 +582,9 @@ static void output_json(FILE *out, const logparse_args *args,
                         lp_budget_result *budget,
                         size_t error_count, size_t warning_count) {
     (void)seg_count;
+
+    build_summary summary;
+    extract_summary(&summary, la);
 
     size_t compressed_lines = 0;
     for (size_t i = 0; i < budget->count; i++)
@@ -349,6 +601,32 @@ static void output_json(FILE *out, const logparse_args *args,
     fprintf(out, "  \"reduction_pct\": %.1f,\n", reduction);
     fprintf(out, "  \"error_blocks\": %zu,\n", error_count);
     fprintf(out, "  \"warning_blocks\": %zu,\n", warning_count);
+
+    /* Summary */
+    fprintf(out, "  \"summary\": {\n");
+    if (summary.board[0]) {
+        fprintf(out, "    \"board\": ");
+        print_json_string(out, summary.board);
+        fprintf(out, ",\n");
+    }
+    if (summary.zephyr_version[0]) {
+        fprintf(out, "    \"zephyr_version\": ");
+        print_json_string(out, summary.zephyr_version);
+        fprintf(out, ",\n");
+    }
+    if (summary.memory_flash[0]) {
+        fprintf(out, "    \"flash\": ");
+        print_json_string(out, summary.memory_flash);
+        fprintf(out, ",\n");
+    }
+    if (summary.memory_ram[0]) {
+        fprintf(out, "    \"ram\": ");
+        print_json_string(out, summary.memory_ram);
+        fprintf(out, ",\n");
+    }
+    fprintf(out, "    \"build_steps\": %zu,\n", summary.max_build_step);
+    fprintf(out, "    \"build_failed\": %s\n", summary.build_failed ? "true" : "false");
+    fprintf(out, "  },\n");
 
     /* Frequency table */
     size_t sorted_count;
@@ -368,13 +646,17 @@ static void output_json(FILE *out, const logparse_args *args,
     }
     fprintf(out, "\n  ],\n");
 
-    /* Segments */
+    /* Segments — only errors/warnings */
     fprintf(out, "  \"segments\": [\n");
+    first = true;
     for (size_t b = 0; b < budget->count; b++) {
         size_t si = budget->indices[b];
         lp_segment *seg = &segs[si];
+        if (seg->type == LP_SEG_BOILERPLATE || seg->type == LP_SEG_BUILD_PROGRESS)
+            continue;
 
-        if (b > 0) fprintf(out, ",\n");
+        if (!first) fprintf(out, ",\n");
+        first = false;
         fprintf(out, "    {\n");
         fprintf(out, "      \"type\": \"%s\",\n", seg_type_name(seg->type));
         fprintf(out, "      \"start_line\": %zu,\n", seg->start_line + 1);
@@ -507,7 +789,8 @@ int main(int argc, char **argv) {
                     segs, seg_count, &budget, error_count, warning_count);
     } else {
         output_text(stdout, &args, mode_name, &la, &dedup,
-                    segs, seg_count, &budget, error_count, warning_count);
+                    segs, seg_count, &budget, error_count, warning_count,
+                    active_mode);
     }
 
     /* Cleanup */

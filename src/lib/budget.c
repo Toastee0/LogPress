@@ -50,6 +50,7 @@ lp_budget_result lp_budget_pack(lp_segment *segs, size_t seg_count,
     size_t ncand = 0;
     for (size_t i = 0; i < seg_count; i++) {
         if (segs[i].type == LP_SEG_ERROR) continue;  /* already included */
+        if (segs[i].score < 0.0f) continue;              /* boilerplate — never include */
         candidates[ncand].idx = i;
         candidates[ncand].score = segs[i].score;
         ncand++;

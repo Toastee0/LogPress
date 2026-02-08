@@ -61,6 +61,34 @@ bool lp_is_tabular(const char **lines, size_t count) {
     return max_cols >= 2;
 }
 
+bool lp_is_build_progress(const char *line) {
+    /* Match lines like: [1/203] Building C object ...
+       Also matches [5/10] Generating ..., [198/203] Linking ..., etc.
+       Tolerates leading whitespace. */
+    const char *p = line;
+    while (*p && isspace((unsigned char)*p)) p++;
+    if (*p != '[') return false;
+    p++;
+    /* Expect digits */
+    if (!isdigit((unsigned char)*p)) return false;
+    while (isdigit((unsigned char)*p)) p++;
+    if (*p != '/') return false;
+    p++;
+    if (!isdigit((unsigned char)*p)) return false;
+    while (isdigit((unsigned char)*p)) p++;
+    if (*p != ']') return false;
+    return true;
+}
+
+bool lp_is_boilerplate(const char *line, const struct lp_mode *mode) {
+    if (!mode || !mode->boilerplate_patterns) return false;
+    for (size_t i = 0; i < mode->boilerplate_count; i++) {
+        if (lp_str_contains(line, mode->boilerplate_patterns[i]))
+            return true;
+    }
+    return false;
+}
+
 static lp_seg_type classify_line(const char *line, const struct lp_mode *mode) {
     /* Check mode-specific error patterns */
     if (mode) {
@@ -100,6 +128,53 @@ static bool is_block_trigger(const char *line, const struct lp_mode *mode) {
     return false;
 }
 
+/* Build and push a segment onto the vector */
+static void push_segment(void *segs_ptr, const char **lines,
+                         size_t seg_start, size_t seg_end, lp_seg_type seg_type) {
+    /* segs_ptr is LP_VEC(lp_segment)* — we use a macro-compatible approach */
+    typedef struct { lp_segment *items; size_t len; size_t cap; } seg_vec;
+    seg_vec *sv = (seg_vec *)segs_ptr;
+
+    size_t seg_lines = seg_end - seg_start;
+    if (seg_lines == 0) return;
+
+    lp_segment seg;
+    seg.start_line = seg_start;
+    seg.end_line = seg_end - 1;
+    seg.type = seg_type;
+    seg.line_count = seg_lines;
+    seg.score = 0.0f;
+
+    /* Copy line pointers (not the strings themselves) */
+    seg.lines = (char **)malloc(seg_lines * sizeof(char *));
+    for (size_t j = 0; j < seg_lines; j++)
+        seg.lines[j] = (char *)lines[seg_start + j];
+
+    /* Estimate tokens */
+    seg.token_count = lp_estimate_tokens_lines((const char **)(lines + seg_start), seg_lines);
+
+    /* Generate label */
+    char label_buf[128];
+    switch (seg_type) {
+        case LP_SEG_ERROR:          snprintf(label_buf, sizeof(label_buf), "error"); break;
+        case LP_SEG_WARNING:        snprintf(label_buf, sizeof(label_buf), "warning"); break;
+        case LP_SEG_DATA:           snprintf(label_buf, sizeof(label_buf), "data"); break;
+        case LP_SEG_PHASE:          snprintf(label_buf, sizeof(label_buf), "phase"); break;
+        case LP_SEG_INFO:           snprintf(label_buf, sizeof(label_buf), "info"); break;
+        case LP_SEG_BUILD_PROGRESS: snprintf(label_buf, sizeof(label_buf), "build"); break;
+        case LP_SEG_BOILERPLATE:    snprintf(label_buf, sizeof(label_buf), "boilerplate"); break;
+        default:                    snprintf(label_buf, sizeof(label_buf), "block"); break;
+    }
+    seg.label = strdup(label_buf);
+
+    /* Push onto vector */
+    if (sv->len >= sv->cap) {
+        sv->cap = sv->cap ? sv->cap * 2 : 8;
+        sv->items = (lp_segment *)realloc(sv->items, sv->cap * sizeof(lp_segment));
+    }
+    sv->items[sv->len++] = seg;
+}
+
 lp_segment *lp_segment_detect(const char **lines, size_t count,
                               const struct lp_mode *mode, size_t *out_count) {
     LP_VEC(lp_segment) segs;
@@ -119,16 +194,29 @@ lp_segment *lp_segment_detect(const char **lines, size_t count,
         size_t seg_start = i;
         lp_seg_type seg_type = LP_SEG_NORMAL;
         int base_indent = lp_indent_level(lines[i]);
+        bool saw_error_content = false;
 
         /* Check if this is a phase marker */
         if (is_phase_marker(lines[i], mode)) {
             seg_type = LP_SEG_PHASE;
         }
 
+        /* Check if first line is build progress */
+        bool first_is_progress = lp_is_build_progress(lines[i]);
+
         /* Classify first line */
         lp_seg_type line_type = classify_line(lines[i], mode);
-        if (line_type > seg_type || (line_type == LP_SEG_ERROR))
+        if (line_type == LP_SEG_ERROR) {
+            seg_type = LP_SEG_ERROR;
+            saw_error_content = true;
+        } else if (line_type > seg_type) {
             seg_type = line_type;
+        }
+
+        /* If first line is progress and not an error, mark as build progress */
+        if (first_is_progress && seg_type == LP_SEG_NORMAL) {
+            seg_type = LP_SEG_BUILD_PROGRESS;
+        }
 
         i++;
 
@@ -141,11 +229,37 @@ lp_segment *lp_segment_detect(const char **lines, size_t count,
             /* A big indent decrease (back to base or less) after indented block = new segment */
             if (indent < base_indent - 2 && i > seg_start + 1) break;
 
-            /* Classify this line too */
+            /* Classify this line */
             line_type = classify_line(lines[i], mode);
-            if (line_type == LP_SEG_ERROR) seg_type = LP_SEG_ERROR;
-            else if (line_type == LP_SEG_WARNING && seg_type == LP_SEG_NORMAL)
+            bool this_is_progress = lp_is_build_progress(lines[i]);
+
+            /* KEY FIX: If we're in an error segment and hit a normal build
+               progress line (not itself an error), break the segment here.
+               This prevents [N/M] Building lines after the error from being
+               absorbed into the error block. */
+            if (saw_error_content && this_is_progress && line_type == LP_SEG_NORMAL) {
+                break;
+            }
+
+            /* If we're in a build progress segment and hit a non-progress line
+               that's not just a cmake status line, break */
+            if (seg_type == LP_SEG_BUILD_PROGRESS && !this_is_progress &&
+                line_type == LP_SEG_ERROR) {
+                break;
+            }
+
+            if (line_type == LP_SEG_ERROR) {
+                seg_type = LP_SEG_ERROR;
+                saw_error_content = true;
+            } else if (line_type == LP_SEG_WARNING && seg_type == LP_SEG_NORMAL)
                 seg_type = LP_SEG_WARNING;
+
+            /* If we're in a normal/progress segment and all lines so far are
+               progress lines, keep it as build progress */
+            if (seg_type == LP_SEG_BUILD_PROGRESS && !this_is_progress &&
+                line_type == LP_SEG_NORMAL) {
+                /* Non-progress normal line mixed in (e.g. cmake status) — keep extending */
+            }
 
             /* Block trigger check */
             if (is_block_trigger(lines[i], mode) && i > seg_start + 2 &&
@@ -160,40 +274,27 @@ lp_segment *lp_segment_detect(const char **lines, size_t count,
         size_t seg_end = i;
         size_t seg_lines = seg_end - seg_start;
 
+        /* Post-classify: if most lines are boilerplate, mark as such */
+        if (seg_type == LP_SEG_NORMAL || seg_type == LP_SEG_DATA) {
+            size_t bp_count = 0;
+            size_t progress_count = 0;
+            for (size_t j = seg_start; j < seg_end; j++) {
+                if (lp_is_boilerplate(lines[j], mode)) bp_count++;
+                if (lp_is_build_progress(lines[j])) progress_count++;
+            }
+            if (bp_count * 2 >= seg_lines && seg_type != LP_SEG_ERROR) {
+                seg_type = LP_SEG_BOILERPLATE;
+            } else if (progress_count * 2 >= seg_lines && seg_type == LP_SEG_NORMAL) {
+                seg_type = LP_SEG_BUILD_PROGRESS;
+            }
+        }
+
         /* Check if this segment is tabular data */
         if (seg_type == LP_SEG_NORMAL && lp_is_tabular(lines + seg_start, seg_lines)) {
             seg_type = LP_SEG_DATA;
         }
 
-        /* Build segment */
-        lp_segment seg;
-        seg.start_line = seg_start;
-        seg.end_line = seg_end - 1;
-        seg.type = seg_type;
-        seg.line_count = seg_lines;
-        seg.score = 0.0f;
-
-        /* Copy line pointers (not the strings themselves) */
-        seg.lines = (char **)malloc(seg_lines * sizeof(char *));
-        for (size_t j = 0; j < seg_lines; j++)
-            seg.lines[j] = (char *)lines[seg_start + j];
-
-        /* Estimate tokens */
-        seg.token_count = lp_estimate_tokens_lines((const char **)(lines + seg_start), seg_lines);
-
-        /* Generate label */
-        char label_buf[128];
-        switch (seg_type) {
-            case LP_SEG_ERROR:   snprintf(label_buf, sizeof(label_buf), "error"); break;
-            case LP_SEG_WARNING: snprintf(label_buf, sizeof(label_buf), "warning"); break;
-            case LP_SEG_DATA:    snprintf(label_buf, sizeof(label_buf), "data"); break;
-            case LP_SEG_PHASE:   snprintf(label_buf, sizeof(label_buf), "phase"); break;
-            case LP_SEG_INFO:    snprintf(label_buf, sizeof(label_buf), "info"); break;
-            default:             snprintf(label_buf, sizeof(label_buf), "block"); break;
-        }
-        seg.label = strdup(label_buf);
-
-        lp_vec_push(segs, seg);
+        push_segment(&segs, lines, seg_start, seg_end, seg_type);
     }
 
     *out_count = segs.len;

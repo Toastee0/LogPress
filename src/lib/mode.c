@@ -106,6 +106,9 @@ static void assign_array(const char *section, const char *key, char **values, si
         if (strcmp(key, "block_triggers") == 0) {
             m->block_triggers = values; m->trigger_count = count; return;
         }
+        if (strcmp(key, "boilerplate_patterns") == 0) {
+            m->boilerplate_patterns = values; m->boilerplate_count = count; return;
+        }
     }
     if (strcmp(section, "interest") == 0) {
         if (strcmp(key, "keywords") == 0) {
@@ -177,6 +180,8 @@ lp_mode *lp_mode_load(const char *path) {
                     free(m->name); m->name = val;
                 } else if (strcmp(section, "mode") == 0 && strcmp(key, "description") == 0) {
                     free(m->description); m->description = val;
+                } else if (strcmp(section, "segments") == 0 && strcmp(key, "progress_pattern") == 0) {
+                    free(m->progress_pattern); m->progress_pattern = val;
                 } else {
                     free(val);
                 }
@@ -208,6 +213,8 @@ void lp_mode_free(lp_mode *m) {
     lp_free_strings(m->keywords, m->keyword_count);
     lp_free_strings(m->error_patterns, m->error_count);
     lp_free_strings(m->warning_patterns, m->warning_count);
+    lp_free_strings(m->boilerplate_patterns, m->boilerplate_count);
+    free(m->progress_pattern);
     free(m);
 }
 

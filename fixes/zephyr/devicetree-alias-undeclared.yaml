@@ -1,0 +1,19 @@
+pattern: "__device_dts_ord_DT_N_ALIAS"
+regex: "__device_dts_ord_DT_N_ALIAS_\\w+_ORD.*undeclared"
+tags: [zephyr, devicetree, alias]
+fix: |
+  A DT_ALIAS() in your C code references a devicetree alias that
+  doesn't exist in the final merged DTS. The alias name in the code
+  (e.g. DT_ALIAS(led_strip)) must exactly match an alias defined in
+  the board overlay or base DTS.
+  Common causes:
+  1. Typo or mismatch in the alias name in the overlay vs C code
+  2. Overlay defines 'led-stripper' but code uses DT_ALIAS(led_strip)
+  3. The overlay file is not being picked up (wrong board qualifier)
+  Fix: Check boards/<board>.overlay for the aliases { } block.
+  The alias name uses hyphens in DTS but underscores in C macros:
+    DTS:  led-strip = &led_strip;
+    C:    DT_ALIAS(led_strip)
+context: "Hit while testing logparse against led_strip sample with intentionally broken alias"
+resolved: 2026-02-07
+severity: error

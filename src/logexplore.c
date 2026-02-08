@@ -413,6 +413,8 @@ int main(int argc, char **argv) {
                 case LP_SEG_ERROR:   type_name = "error"; break;
                 case LP_SEG_WARNING: type_name = "warning"; break;
                 case LP_SEG_DATA:    type_name = "tabular data"; break;
+                case LP_SEG_BUILD_PROGRESS: type_name = "build progress"; break;
+                case LP_SEG_BOILERPLATE: type_name = "boilerplate"; break;
                 case LP_SEG_PHASE:   type_name = "phase marker"; break;
                 case LP_SEG_INFO:    type_name = "info"; break;
                 case LP_SEG_NORMAL:  type_name = "block"; break;

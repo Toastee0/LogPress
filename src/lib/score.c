@@ -14,10 +14,12 @@ float lp_score_segment(lp_segment *seg, const struct lp_mode *mode,
 
     /* Type-based base score */
     switch (seg->type) {
-        case LP_SEG_ERROR:   score += 10.0f; break;
-        case LP_SEG_WARNING: score += 5.0f;  break;
-        case LP_SEG_DATA:    score += 4.0f;  break;
-        case LP_SEG_PHASE:   score += 2.0f;  break;
+        case LP_SEG_ERROR:          score += 10.0f; break;
+        case LP_SEG_WARNING:        score += 5.0f;  break;
+        case LP_SEG_DATA:           score += 2.0f;  break;
+        case LP_SEG_PHASE:          score += 1.0f;  break;
+        case LP_SEG_BUILD_PROGRESS: score += 0.5f;  break;
+        case LP_SEG_BOILERPLATE:    return -1.0f;    /* never include */
         default: break;
     }
 
