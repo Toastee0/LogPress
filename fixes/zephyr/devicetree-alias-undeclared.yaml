@@ -1,19 +1,22 @@
-pattern: "__device_dts_ord_DT_N_ALIAS"
-regex: "__device_dts_ord_DT_N_ALIAS_\\w+_ORD.*undeclared"
+pattern: "__device_dts_ord_"
+regex: "__device_dts_ord_\\w+.*undeclared"
 tags: [zephyr, devicetree, alias]
 fix: |
-  A DT_ALIAS() in your C code references a devicetree alias that
-  doesn't exist in the final merged DTS. The alias name in the code
-  (e.g. DT_ALIAS(led_strip)) must exactly match an alias defined in
-  the board overlay or base DTS.
+  A devicetree node reference in your C code points to a node/alias
+  that doesn't exist in the final merged DTS. This covers DT_ALIAS(),
+  DT_NODELABEL(), DEVICE_DT_GET(), and similar macros.
+  Fix: Read the board DTS definition to find the correct alias or
+  node label. Check:
+    1. The board base DTS: boards/<vendor>/<board>/<board>.dts
+    2. Your overlay: boards/<board_qualifier>.overlay
+    3. The aliases { } block in either file
   Common causes:
-  1. Typo or mismatch in the alias name in the overlay vs C code
-  2. Overlay defines 'led-stripper' but code uses DT_ALIAS(led_strip)
-  3. The overlay file is not being picked up (wrong board qualifier)
-  Fix: Check boards/<board>.overlay for the aliases { } block.
-  The alias name uses hyphens in DTS but underscores in C macros:
-    DTS:  led-strip = &led_strip;
-    C:    DT_ALIAS(led_strip)
-context: "Hit while testing logparse against led_strip sample with intentionally broken alias"
-resolved: 2026-02-07
+  - The alias simply doesn't exist on this board (e.g. sw0 on boards
+    with no user button). Fix: add the node + alias in your overlay.
+  - Alias name mismatch: DTS uses hyphens, C macros use underscores:
+      DTS:  led-strip = &led_strip;
+      C:    DT_ALIAS(led_strip)
+  - Overlay not picked up (wrong board qualifier in filename)
+context: "Generic DTS ordinal error. Covers missing aliases (sw0, led-strip, etc.) and missing node labels."
+resolved: 2026-02-09
 severity: error

@@ -438,5 +438,31 @@ char *lp_fix_find_dir(void) {
     if (lp_file_exists("fixes")) return strdup("fixes");
     const char *env = getenv("LOGPILOT_FIXES");
     if (env && lp_file_exists(env)) return strdup(env);
+
+    /* Try relative to executable */
+    char *exe_dir = lp_get_exe_dir();
+    if (exe_dir) {
+        char *p = lp_path_join(exe_dir, "fixes");
+        if (lp_file_exists(p)) { free(exe_dir); return p; }
+        free(p);
+        p = lp_path_join(exe_dir, "../fixes");
+        if (lp_file_exists(p)) { free(exe_dir); return p; }
+        free(p);
+        free(exe_dir);
+    }
+
+    return NULL;
+}
+
+char *lp_fix_find_global_dir(void) {
+#ifdef _WIN32
+    const char *home = getenv("USERPROFILE");
+#else
+    const char *home = getenv("HOME");
+#endif
+    if (!home) return NULL;
+    char *dir = lp_path_join(home, ".logpilot/fixes");
+    if (lp_file_exists(dir)) return dir;
+    free(dir);
     return NULL;
 }

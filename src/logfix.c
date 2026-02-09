@@ -354,7 +354,7 @@ int main(int argc, char **argv) {
         return ret;
     }
 
-    /* Load fix database */
+    /* Load fix database (local + global) */
     char *fix_dir = lp_fix_find_dir();
     if (!fix_dir) {
         if (args.stats_mode || args.validate_mode) {
@@ -367,6 +367,21 @@ int main(int argc, char **argv) {
 
     size_t fix_count = 0;
     lp_fix **fixes = lp_fix_load_dir(fix_dir, &fix_count);
+
+    /* Also load from global ~/.logpilot/fixes/ */
+    char *global_dir = lp_fix_find_global_dir();
+    if (global_dir && (!fix_dir || strcmp(global_dir, fix_dir) != 0)) {
+        size_t global_count = 0;
+        lp_fix **global_fixes = lp_fix_load_dir(global_dir, &global_count);
+        if (global_fixes && global_count > 0) {
+            fixes = realloc(fixes, (fix_count + global_count) * sizeof(lp_fix *));
+            for (size_t i = 0; i < global_count; i++)
+                fixes[fix_count + i] = global_fixes[i];
+            fix_count += global_count;
+            free(global_fixes); /* only free array, not entries */
+        }
+        free(global_dir);
+    }
 
     /* Add from file */
     if (args.add_from) {

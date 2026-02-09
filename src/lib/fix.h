@@ -57,4 +57,7 @@ int lp_fix_write(const char *path, const lp_fix *f);
 /* Find fixes directory. Tries: ./fixes, $LOGPILOT_FIXES, exe dir. */
 char *lp_fix_find_dir(void);
 
+/* Find global (OS-level) fixes directory: ~/.logpilot/fixes/ */
+char *lp_fix_find_global_dir(void);
+
 #endif /* LP_FIX_H */

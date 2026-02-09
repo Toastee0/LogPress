@@ -287,6 +287,31 @@ char *lp_mode_find_dir(void) {
     const char *env = getenv("LOGPILOT_MODES");
     if (env && lp_file_exists(env)) return strdup(env);
 
-    /* Try relative to executable (not implemented for all platforms) */
+    /* Try relative to executable */
+    char *exe_dir = lp_get_exe_dir();
+    if (exe_dir) {
+        /* Try <exe_dir>/modes */
+        char *p = lp_path_join(exe_dir, "modes");
+        if (lp_file_exists(p)) { free(exe_dir); return p; }
+        free(p);
+        /* Try <exe_dir>/../modes (exe in build/, modes next to it) */
+        p = lp_path_join(exe_dir, "../modes");
+        if (lp_file_exists(p)) { free(exe_dir); return p; }
+        free(p);
+        free(exe_dir);
+    }
+
+    /* Try global ~/.logpilot/modes */
+#ifdef _WIN32
+    const char *home = getenv("USERPROFILE");
+#else
+    const char *home = getenv("HOME");
+#endif
+    if (home) {
+        char *p = lp_path_join(home, ".logpilot/modes");
+        if (lp_file_exists(p)) return p;
+        free(p);
+    }
+
     return NULL;
 }

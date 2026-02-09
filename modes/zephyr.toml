@@ -5,7 +5,7 @@ name = "zephyr"
 description = "Zephyr RTOS / west / Nordic SDK build system"
 
 [detection]
-signatures = ["west build", "-- Found Zephyr", "ninja: build", "-- Found toolchain", "Zephyr version:", "Loading Kconfig"]
+signatures = ["west build", "Loading Zephyr", "Zephyr version:", "Found BOARD.dts", "Generated zephyr.dts", "Zephyr base"]
 
 [dedup]
 strip_patterns = ['"[^"]*"', "0x[0-9a-f]+", "/home/[^ ]+", "/usr/[^ ]+", "C:\\\\[^ ]+"]

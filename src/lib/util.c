@@ -230,6 +230,27 @@ bool lp_file_exists(const char *path) {
 #endif
 }
 
+char *lp_get_exe_dir(void) {
+#ifdef _WIN32
+    char buf[MAX_PATH];
+    DWORD len = GetModuleFileNameA(NULL, buf, MAX_PATH);
+    if (len == 0 || len >= MAX_PATH) return NULL;
+    /* Strip filename to get directory */
+    char *last_sep = strrchr(buf, '\\');
+    if (!last_sep) last_sep = strrchr(buf, '/');
+    if (last_sep) *last_sep = '\0';
+    return strdup(buf);
+#else
+    char buf[4096];
+    ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (len < 0) return NULL;
+    buf[len] = '\0';
+    char *last_sep = strrchr(buf, '/');
+    if (last_sep) *last_sep = '\0';
+    return strdup(buf);
+#endif
+}
+
 #ifdef _WIN32
 
 int lp_dir_iter(const char *dir, const char *suffix, lp_dir_cb cb, void *userdata) {

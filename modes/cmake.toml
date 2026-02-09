@@ -5,7 +5,7 @@ name = "cmake"
 description = "Raw CMake / Make / Ninja build system"
 
 [detection]
-signatures = ["-- Configuring", "-- Generating", "cmake", "CMake Error", "-- Build files have been written", "-- Found"]
+signatures = ["cmake --build", "CMake Error", "CMake Warning", "Scanning dependencies"]
 
 [dedup]
 strip_patterns = ["\"[^\"]*\"", "0x[0-9a-f]+", "/home/[^ ]+", "/usr/[^ ]+"]

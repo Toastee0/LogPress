@@ -63,6 +63,9 @@ void   lp_free_strings(char **strs, size_t count);
 char *lp_path_join(const char *dir, const char *file);
 bool  lp_file_exists(const char *path);
 
+/* Get directory containing the running executable. Returns malloc'd string. */
+char *lp_get_exe_dir(void);
+
 /* Iterate files in a directory matching a suffix (e.g. ".toml").
    Calls cb(path, userdata) for each match. */
 typedef void (*lp_dir_cb)(const char *path, void *userdata);
