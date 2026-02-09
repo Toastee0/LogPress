@@ -121,6 +121,14 @@ static void assign_array(const char *section, const char *key, char **values, si
             m->warning_patterns = values; m->warning_count = count; return;
         }
     }
+    if (strcmp(section, "elision") == 0) {
+        if (strcmp(key, "drop_contains") == 0) {
+            m->drop_contains = values; m->drop_count = count; return;
+        }
+        if (strcmp(key, "keep_once_contains") == 0) {
+            m->keep_once_contains = values; m->keep_once_count = count; return;
+        }
+    }
     /* Unrecognized — free */
     (void)dst;
     (void)dst_count;
@@ -182,6 +190,18 @@ lp_mode *lp_mode_load(const char *path) {
                     free(m->description); m->description = val;
                 } else if (strcmp(section, "segments") == 0 && strcmp(key, "progress_pattern") == 0) {
                     free(m->progress_pattern); m->progress_pattern = val;
+                } else if (strcmp(section, "summary") == 0 && strcmp(key, "board_pattern") == 0) {
+                    free(m->board_pattern); m->board_pattern = val;
+                } else if (strcmp(section, "summary") == 0 && strcmp(key, "zephyr_version_pattern") == 0) {
+                    free(m->zephyr_version_pattern); m->zephyr_version_pattern = val;
+                } else if (strcmp(section, "summary") == 0 && strcmp(key, "toolchain_pattern") == 0) {
+                    free(m->toolchain_pattern); m->toolchain_pattern = val;
+                } else if (strcmp(section, "summary") == 0 && strcmp(key, "overlay_pattern") == 0) {
+                    free(m->overlay_pattern); m->overlay_pattern = val;
+                } else if (strcmp(section, "summary") == 0 && strcmp(key, "memory_pattern") == 0) {
+                    free(m->memory_pattern); m->memory_pattern = val;
+                } else if (strcmp(section, "summary") == 0 && strcmp(key, "output_pattern") == 0) {
+                    free(m->output_pattern); m->output_pattern = val;
                 } else {
                     free(val);
                 }
@@ -214,7 +234,15 @@ void lp_mode_free(lp_mode *m) {
     lp_free_strings(m->error_patterns, m->error_count);
     lp_free_strings(m->warning_patterns, m->warning_count);
     lp_free_strings(m->boilerplate_patterns, m->boilerplate_count);
+    lp_free_strings(m->drop_contains, m->drop_count);
+    lp_free_strings(m->keep_once_contains, m->keep_once_count);
     free(m->progress_pattern);
+    free(m->board_pattern);
+    free(m->zephyr_version_pattern);
+    free(m->toolchain_pattern);
+    free(m->overlay_pattern);
+    free(m->memory_pattern);
+    free(m->output_pattern);
     free(m);
 }
 

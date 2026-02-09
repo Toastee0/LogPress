@@ -110,6 +110,82 @@ bool lp_is_boilerplate(const char *line, const struct lp_mode *mode) {
     return false;
 }
 
+bool lp_is_source_context(const char *line) {
+    /* GCC/clang source context lines:
+       "   42 |   some_code_here"   (line number + pipe + source)
+       "      |   ^~~~"             (caret line, no line number)
+       "      |   ~~~~~"            (underline continuation)
+    */
+    const char *p = line;
+    while (*p == ' ') p++;  /* skip leading spaces */
+
+    /* Case 1: digits followed by ' | ' — source line with line number */
+    if (isdigit((unsigned char)*p)) {
+        while (isdigit((unsigned char)*p)) p++;
+        if (*p == ' ' && *(p + 1) == '|' && *(p + 2) == ' ') return true;
+    }
+
+    /* Case 2: ' | ' directly — caret/underline line (no line number) */
+    if (*p == '|' && (*(p + 1) == ' ' || *(p + 1) == '\0')) return true;
+
+    /* Case 3: bare caret/tilde line (some compilers): "      ^~~~~" */
+    if (*p == '^' || *p == '~') {
+        const char *q = p;
+        while (*q == '^' || *q == '~' || *q == ' ') q++;
+        if (*q == '\0' || *q == '\n') return true;
+    }
+
+    return false;
+}
+
+lp_fate lp_line_fate(const char *line, const struct lp_mode *mode) {
+    if (!line) return LP_FATE_DROP;
+
+    /* Blank lines: drop */
+    if (lp_is_blank(line)) return LP_FATE_DROP;
+
+    /* Error/warning lines always survive */
+    if (lp_str_contains_ci(line, "error:") || lp_str_contains_ci(line, "fatal:") ||
+        lp_str_contains_ci(line, "FAILED") || lp_str_contains_ci(line, "undefined reference"))
+        return LP_FATE_KEEP;
+    if (lp_str_contains_ci(line, "warning:"))
+        return LP_FATE_KEEP;
+
+    if (mode) {
+        /* Mode-specific error/warning patterns → KEEP */
+        for (size_t i = 0; i < mode->error_count; i++) {
+            if (lp_str_contains_ci(line, mode->error_patterns[i]))
+                return LP_FATE_KEEP;
+        }
+        for (size_t i = 0; i < mode->warning_count; i++) {
+            if (lp_str_contains_ci(line, mode->warning_patterns[i]))
+                return LP_FATE_KEEP;
+        }
+
+        /* Explicit drop patterns → DROP */
+        for (size_t i = 0; i < mode->drop_count; i++) {
+            if (lp_str_contains(line, mode->drop_contains[i]))
+                return LP_FATE_DROP;
+        }
+
+        /* Boilerplate → DROP */
+        if (lp_is_boilerplate(line, mode))
+            return LP_FATE_DROP;
+
+        /* Keep-once patterns → KEEP_ONCE */
+        for (size_t i = 0; i < mode->keep_once_count; i++) {
+            if (lp_str_contains(line, mode->keep_once_contains[i]))
+                return LP_FATE_KEEP_ONCE;
+        }
+    }
+
+    /* Build progress and compiler commands → DROP */
+    if (lp_is_build_progress(line)) return LP_FATE_DROP;
+    if (lp_is_compiler_command(line)) return LP_FATE_DROP;
+
+    return LP_FATE_KEEP;
+}
+
 static lp_seg_type classify_line(const char *line, const struct lp_mode *mode) {
     /* Check mode-specific error patterns */
     if (mode) {

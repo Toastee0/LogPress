@@ -67,4 +67,22 @@ bool lp_is_boilerplate(const char *line, const struct lp_mode *mode);
 /* Check if a line is a compiler/linker command invocation (long noise) */
 bool lp_is_compiler_command(const char *line);
 
+/* Check if a line is GCC/clang source context: "  NNN | code" or caret "  ^~~~" */
+bool lp_is_source_context(const char *line);
+
+/* Line fate: determines whether a line survives to output */
+typedef enum {
+    LP_FATE_KEEP,       /* Emit verbatim (errors, warnings, diagnostics) */
+    LP_FATE_KEEP_ONCE,  /* Emit once in summary, suppress elsewhere */
+    LP_FATE_DROP        /* Silently elide — zero diagnostic value */
+} lp_fate;
+
+/* Classify a line's fate based on mode config.
+   Checks (in order): error/warning patterns → KEEP,
+   drop_contains/boilerplate → DROP,
+   keep_once_contains → KEEP_ONCE,
+   build progress / compiler commands → DROP,
+   otherwise → KEEP. */
+lp_fate lp_line_fate(const char *line, const struct lp_mode *mode);
+
 #endif /* LP_SEGMENT_H */

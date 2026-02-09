@@ -70,7 +70,50 @@ boilerplate_patterns = [
 [interest]
 keywords = ["overlay", "CONFIG_", "FLASH:", "RAM:", "DT_", "pinctrl", "chosen", "compatible", "uf2", "merged.hex"]
 error_patterns = ["error:", "fatal:", "undefined reference", "multiple definition", "depends on undefined node", "ninja: build stopped"]
-warning_patterns = ["warning:", "note:"]
+warning_patterns = ["warning:"]
+
+# Elision: silent line fate control for LLM-optimal output
+# drop_contains: lines matching any of these vanish completely (no marker, no count)
+# keep_once_contains: lines matching these appear once in the summary header, nowhere else
+[elision]
+drop_contains = [
+    "-- Found west (found",
+    "-- Found Python3:",
+    "-- Cache files will be written to:",
+    "-- Found host-tools:",
+    "-- Found toolchain:",
+    "-- Found gen_kobject_list:",
+    "-- Found assembler:",
+    "-- Found GnuLd:",
+    "-- Found BOARD.dts:",
+    "-- Could NOT find Dtc",
+    "Loading Zephyr module",
+    "Loading Zephyr default modules",
+    "Loaded configuration",
+    "Merged configuration",
+    "Configuration saved to",
+    "Kconfig header saved to",
+    "Hint: The project() command",
+    "Creating directories for",
+    "No download step for",
+    "No update step for",
+    "No patch step for",
+    "No configure step for",
+    "No install step for",
+    "Completed '",
+    "Performing build step for",
+    "*******************************",
+    "* Running CMake for"
+]
+keep_once_contains = [
+    "-- Board:",
+    "-- Zephyr version:",
+    "-- Found devicetree overlay:",
+    "The C compiler identification is",
+    "FLASH:",
+    "RAM:",
+    "Wrote "
+]
 
 # Lines to extract into the summary header (key=regex with capture group)
 [summary]

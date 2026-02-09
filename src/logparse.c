@@ -419,9 +419,9 @@ static void output_text(FILE *out, const logparse_args *args,
 
         /* Count non-noise lines within the segment */
         for (size_t l = 0; l < seg->line_count; l++) {
-            if (lp_is_build_progress(seg->lines[l])) continue;
-            if (lp_is_boilerplate(seg->lines[l], mode)) continue;
-            if (lp_is_compiler_command(seg->lines[l])) continue;
+            lp_fate f = lp_line_fate(seg->lines[l], mode);
+            if (f == LP_FATE_DROP) continue;
+            if (f == LP_FATE_KEEP_ONCE) continue;
             output_lines++;
         }
     }
@@ -485,9 +485,14 @@ static void output_text(FILE *out, const logparse_args *args,
     size_t freq_shown = 0;
     for (size_t i = 0; i < freq_top; i++) {
         if (sorted[i]->count < 3 && !args->raw_freq) continue;
-        /* Skip boilerplate/progress noise */
-        if (lp_is_build_progress(sorted[i]->original)) continue;
-        if (lp_is_blank(sorted[i]->original)) continue;
+        /* Use fate to decide: only KEEP lines belong in FREQ */
+        lp_fate fate = lp_line_fate(sorted[i]->original, mode);
+        if (fate == LP_FATE_DROP) continue;
+        if (fate == LP_FATE_KEEP_ONCE) continue;  /* already in summary */
+        /* Skip GCC source-context lines (line numbers, carets, underlines) */
+        if (lp_is_source_context(sorted[i]->original)) continue;
+        /* Skip note: lines — they're supplementary, not independently useful */
+        if (lp_str_contains(sorted[i]->original, "note:")) continue;
         /* Skip lines that are just decorative */
         const char *trimmed = sorted[i]->original;
         while (*trimmed == ' ' || *trimmed == '-' || *trimmed == '*') trimmed++;
@@ -539,35 +544,119 @@ static void output_text(FILE *out, const logparse_args *args,
                 seg_type_name(seg->type),
                 seg->start_line + 1, seg->end_line + 1);
 
-        for (size_t l = 0; l < seg->line_count; l++) {
-            const char *line = seg->lines[l];
+        /* Within-segment dedup for warning/error blocks:
+           When the same warning appears N times (e.g. -Wdouble-promotion on
+           6 different variables), show the first occurrence in full and
+           collapse the rest into a single count line. */
+        if ((seg->type == LP_SEG_WARNING || seg->type == LP_SEG_ERROR) &&
+            seg->line_count > 8) {
+            /* Pass 1: Find the first warning: line and its normalized key.
+               A "warning key" is the warning flag like [-Wdouble-promotion]
+               or the text after "warning:" stripped of variable names. */
+            typedef struct { const char *key; size_t first_idx; size_t count; } wkey;
+            wkey seen_warnings[64];
+            size_t seen_count = 0;
+            bool *suppress = (bool *)calloc(seg->line_count, sizeof(bool));
 
-            /* Skip noise lines within segments */
-            if (lp_is_build_progress(line)) continue;
-            if (lp_is_boilerplate(line, mode)) continue;
-            if (lp_is_compiler_command(line)) continue;
-            if (seg->type != LP_SEG_ERROR && seg->type != LP_SEG_WARNING) {
-                if (lp_is_blank(line)) continue;
-            }
-
-            /* Show dedup count for repeated lines */
-            size_t line_len = strlen(line);
-            uint64_t h = lp_fnv1a(line, line_len);
-            size_t idx = (size_t)(h & (dedup->capacity - 1));
-            size_t dup_count = 1;
-            size_t line_num = seg->start_line + l;
-            while (dedup->buckets[idx].occupied) {
-                if (dedup->buckets[idx].hash == h &&
-                    strcmp(dedup->buckets[idx].original, line) == 0) {
-                    dup_count = dedup->buckets[idx].count;
-                    break;
+            for (size_t l = 0; l < seg->line_count; l++) {
+                const char *wline = seg->lines[l];
+                /* Look for "warning:" or "error:" */
+                const char *wp = strstr(wline, "warning:");
+                if (!wp) wp = strstr(wline, "error:");
+                if (!wp) continue;
+                /* Extract the warning flag: [-Wfoo] at end of line */
+                const char *bracket = strstr(wp, "[-W");
+                const char *key_str = NULL;
+                if (bracket) {
+                    key_str = bracket;
+                } else {
+                    /* Use the warning text after "warning: " as key */
+                    key_str = wp;
                 }
-                idx = (idx + 1) & (dedup->capacity - 1);
+                /* Check if we've seen this key before */
+                bool found = false;
+                for (size_t w = 0; w < seen_count; w++) {
+                    if (key_str && seen_warnings[w].key &&
+                        strcmp(seen_warnings[w].key, key_str) == 0) {
+                        seen_warnings[w].count++;
+                        /* Suppress this warning and its context lines */
+                        suppress[l] = true;
+                        /* Also suppress note:/source context lines following it */
+                        for (size_t n = l + 1; n < seg->line_count; n++) {
+                            const char *nl = seg->lines[n];
+                            if (lp_is_source_context(nl) ||
+                                lp_str_contains(nl, "note:") ||
+                                lp_is_blank(nl)) {
+                                suppress[n] = true;
+                            } else {
+                                break;
+                            }
+                        }
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found && seen_count < 64) {
+                    seen_warnings[seen_count].key = key_str;
+                    seen_warnings[seen_count].first_idx = l;
+                    seen_warnings[seen_count].count = 1;
+                    seen_count++;
+                }
             }
-            if (dup_count > 1 && line_num == dedup->buckets[idx].first_line) {
-                fprintf(out, "  [x%zu] %s\n", dup_count, line);
-            } else if (dup_count <= 1) {
+
+            /* Emit lines, skipping suppressed ones */
+            for (size_t l = 0; l < seg->line_count; l++) {
+                if (suppress[l]) continue;
+                const char *line = seg->lines[l];
+
+                lp_fate line_fate = lp_line_fate(line, mode);
+                if (line_fate == LP_FATE_DROP && !lp_is_blank(line)) continue;
+
                 fprintf(out, "  %s\n", line);
+
+                /* After first instance of a repeated warning, emit count */
+                for (size_t w = 0; w < seen_count; w++) {
+                    if (seen_warnings[w].first_idx == l && seen_warnings[w].count > 1) {
+                        fprintf(out, "  ... repeated %zu more times (same warning, different variables)\n",
+                                seen_warnings[w].count - 1);
+                        break;
+                    }
+                }
+            }
+            free(suppress);
+        } else {
+            /* Standard output for non-repeated segments */
+            for (size_t l = 0; l < seg->line_count; l++) {
+                const char *line = seg->lines[l];
+
+                /* Use centralized fate to filter noise lines */
+                lp_fate line_fate = lp_line_fate(line, mode);
+                if (seg->type == LP_SEG_ERROR || seg->type == LP_SEG_WARNING) {
+                    if (line_fate == LP_FATE_DROP && !lp_is_blank(line)) continue;
+                } else {
+                    if (line_fate == LP_FATE_DROP) continue;
+                    if (line_fate == LP_FATE_KEEP_ONCE) continue;
+                }
+
+                /* Show dedup count for repeated lines */
+                size_t line_len = strlen(line);
+                uint64_t h = lp_fnv1a(line, line_len);
+                size_t idx = (size_t)(h & (dedup->capacity - 1));
+                size_t dup_count = 1;
+                size_t line_num = seg->start_line + l;
+                while (dedup->buckets[idx].occupied) {
+                    if (dedup->buckets[idx].hash == h &&
+                        strcmp(dedup->buckets[idx].original, line) == 0) {
+                        dup_count = dedup->buckets[idx].count;
+                        break;
+                    }
+                    idx = (idx + 1) & (dedup->capacity - 1);
+                }
+                if (dup_count > 1 && line_num == dedup->buckets[idx].first_line) {
+                    fprintf(out, "  [x%zu] %s\n", dup_count, line);
+                } else if (dup_count <= 1) {
+                    fprintf(out, "  %s\n", line);
+                }
             }
         }
         fprintf(out, "\n");

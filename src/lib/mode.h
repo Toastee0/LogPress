@@ -28,6 +28,21 @@ typedef struct lp_mode {
     char  *progress_pattern;  /* Regex for build progress lines (e.g. [N/M]) */
     char **boilerplate_patterns;
     size_t boilerplate_count;
+
+    /* Elision: lines matching these are silently dropped (never shown) */
+    char **drop_contains;
+    size_t drop_count;
+    /* Elision: lines matching these appear once in summary, never elsewhere */
+    char **keep_once_contains;
+    size_t keep_once_count;
+
+    /* Summary extraction patterns (regex with capture groups) */
+    char  *board_pattern;
+    char  *zephyr_version_pattern;
+    char  *toolchain_pattern;
+    char  *overlay_pattern;
+    char  *memory_pattern;
+    char  *output_pattern;
 } lp_mode;
 
 /* Load a single mode from a TOML file. Returns NULL on error. */
