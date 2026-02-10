@@ -70,6 +70,10 @@ bool lp_is_compiler_command(const char *line);
 /* Check if a line is GCC/clang source context: "  NNN | code" or caret "  ^~~~" */
 bool lp_is_source_context(const char *line);
 
+/* Check if a line is a GCC/clang caret/underline line (visual pointer, no code):
+   "      |   ^~~~"  or  "      ^~~~~"  — pure alignment noise */
+bool lp_is_caret_line(const char *line);
+
 /* Line fate: determines whether a line survives to output */
 typedef enum {
     LP_FATE_KEEP,       /* Emit verbatim (errors, warnings, diagnostics) */

@@ -138,11 +138,67 @@ bool lp_is_source_context(const char *line) {
     return false;
 }
 
+bool lp_is_caret_line(const char *line) {
+    /* Detect GCC/clang visual pointer lines that contain no code:
+       "      |   ^~~~"      (pipe + caret/tilde)
+       "      |   ~~~~~"     (pipe + underline continuation)
+       "      ^~~~~"         (bare caret/tilde, no pipe)
+       These are alignment cues for terminal display — useless in compressed output. */
+    const char *p = line;
+    while (*p == ' ') p++;
+
+    /* Case 1: pipe-prefixed caret line:  "| ^~~~" or "| ~~~~" */
+    if (*p == '|') {
+        p++;
+        while (*p == ' ') p++;
+        /* After '| ', must be only ^~_ chars to end of line */
+        if (*p == '^' || *p == '~') {
+            while (*p == '^' || *p == '~' || *p == ' ') p++;
+            if (*p == '\0' || *p == '\n') return true;
+        }
+        return false;
+    }
+
+    /* Case 2: bare caret/tilde line */
+    if (*p == '^' || *p == '~') {
+        const char *q = p;
+        while (*q == '^' || *q == '~' || *q == ' ') q++;
+        if (*q == '\0' || *q == '\n') return true;
+    }
+
+    return false;
+}
+
 lp_fate lp_line_fate(const char *line, const struct lp_mode *mode) {
     if (!line) return LP_FATE_DROP;
 
     /* Blank lines: drop */
     if (lp_is_blank(line)) return LP_FATE_DROP;
+
+    /* Caret/underline lines: visual noise, drop */
+    if (lp_is_caret_line(line)) return LP_FATE_DROP;
+
+    /* Include-chain continuation lines: "                 from path/file.h:NN,"
+       These follow "In file included from" (already in drop_contains) but
+       the continuation lines don't match that pattern. Drop SDK paths,
+       but keep references to the user's own source code. */
+    {
+        const char *p = line;
+        while (*p == ' ') p++;
+        if (strncmp(p, "from ", 5) == 0) {
+            /* Verify it looks like a path reference: has a colon after the path */
+            const char *colon = strchr(p + 5, ':');
+            if (colon && (isdigit((unsigned char)*(colon + 1)) ||
+                          (colon > p + 5 && *(colon - 1) != ' '))) {
+                /* Only drop if it's an SDK path, not the user's source */
+                if (strstr(p, "/ncs/") || strstr(p, "/zephyr/") ||
+                    strstr(p, "/modules/") || strstr(p, "/sdk-nrf/") ||
+                    strstr(p, "\\ncs\\") || strstr(p, "\\zephyr\\") ||
+                    strstr(p, "\\modules\\") || strstr(p, "\\sdk-nrf\\"))
+                    return LP_FATE_DROP;
+            }
+        }
+    }
 
     /* Error/warning lines always survive */
     if (lp_str_contains_ci(line, "error:") || lp_str_contains_ci(line, "fatal:") ||

@@ -540,9 +540,7 @@ static void output_text(FILE *out, const logparse_args *args,
             if (all_summarized) continue;
         }
 
-        fprintf(out, "[%s] lines %zu-%zu\n",
-                seg_type_name(seg->type),
-                seg->start_line + 1, seg->end_line + 1);
+        fprintf(out, "[%s]\n", seg_type_name(seg->type));
 
         /* Within-segment dedup for warning/error blocks:
            When the same warning appears N times (e.g. -Wdouble-promotion on
@@ -664,6 +662,8 @@ static void output_text(FILE *out, const logparse_args *args,
 
     free(sorted);
 }
+
+
 
 /* ---- Output: JSON ---- */
 

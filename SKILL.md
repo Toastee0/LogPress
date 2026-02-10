@@ -14,13 +14,13 @@ LogPilot is a three-tool system for token-efficient build log analysis. Never re
 
 ```bash
 # Compress a build log (auto-detects build system)
-bin/logparse build.log
+logparse build.log
 
 # Explore an unfamiliar log format
-bin/logexplore unknown.log
+logexplore unknown.log
 
 # Check errors against known fixes
-bin/logparse build.log | bin/logfix --check
+logparse build.log | logfix --check
 ```
 
 ## Tools

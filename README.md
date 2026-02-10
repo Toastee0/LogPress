@@ -50,6 +50,9 @@ logparse build.log --keywords "ord, overlay, pinctrl"
 # JSON output for programmatic use
 logparse build.log --json
 
+# The default text output is already optimized for LLM consumption —
+# language-native, not JSON. Use it as-is.
+
 # Explore an unfamiliar log format before creating a mode
 logexplore mystery-output.log --show-segments
 
@@ -157,8 +160,10 @@ The `logparse` pipeline:
 1. **Auto-detect mode** — Sniff first 50 lines for signatures (`west build`, `BUILD SUCCESSFUL`, `pytest`, etc.)
 2. **Deduplicate** — FNV-1a hash each normalized line, collapse repeats with counts
 3. **Segment** — Identify coherent blocks by blank lines, indent shifts, phase markers
-4. **Score** — Rate each segment: errors (+10), warnings (+5), keyword matches (+3), frequency outliers (+2)
-5. **Pack** — Greedy knapsack: errors always included, fill remaining budget by score
+4. **Line fate** — Three-tier model classifies every line: KEEP (errors, warnings, diagnostics), KEEP_ONCE (summary facts), DROP (boilerplate, caret lines, SDK include chains). Controlled by `[elision]` section in mode TOML.
+5. **Score** — Rate each segment: errors (+10), warnings (+5), keyword matches (+3), frequency outliers (+2)
+6. **Pack** — Greedy knapsack: errors always included, fill remaining budget by score
+7. **Within-segment dedup** — Collapse repeated warnings with same `-Wflag` to first instance + count
 
 ## Philosophy
 

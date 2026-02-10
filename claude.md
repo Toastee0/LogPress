@@ -22,10 +22,20 @@ LogPilot is a set of three Unix-philosophy CLI tools that sit between raw build 
 logpilot/
 ├── claude.md              ← You are here (Claude Code instructions)
 ├── SKILL.md               ← Claude.ai skill variant
-├── bin/
-│   ├── logparse           ← Main compression tool
-│   ├── logexplore         ← Structure discovery tool
-│   └── logfix             ← Fix memory lookup/writer
+├── CMakeLists.txt          ← Build system
+├── src/
+│   ├── logparse.c          ← Main compression tool
+│   ├── logexplore.c        ← Structure discovery tool (planned)
+│   ├── logfix.c            ← Fix memory lookup/writer (planned)
+│   └── lib/
+│       ├── segment.c/.h    ← Block detection, line fate, scoring
+│       ├── dedup.c/.h      ← FNV-1a hash dedup
+│       ├── toml.c/.h       ← Hand-rolled TOML parser
+│       ├── yaml.c/.h       ← Hand-rolled YAML parser
+│       ├── mode.c/.h       ← Mode loading and auto-detection
+│       ├── budget.c/.h     ← Greedy knapsack packing
+│       ├── regex.c/.h      ← tiny-regex-c (vendored)
+│       └── util.c/.h       ← Shared utilities
 ├── modes/
 │   ├── zephyr.toml        ← Zephyr/west build mode
 │   ├── gradle.toml        ← Gradle/Android build mode
@@ -44,9 +54,15 @@ logpilot/
 ├── examples/
 │   ├── example-mode.toml
 │   └── example-fix.yaml
-└── tests/
-    ├── sample-logs/       ← Real log snippets for testing
-    └── test_logparse.py
+├── test_programs/         ← Real build logs for integration tests
+│   └── led_strip/
+│       ├── build_fail.log
+│       ├── build_success.log
+│       └── build_warnings.log
+├── tests/
+│   └── sample-logs/       ← Additional test log snippets
+└── build/                 ← CMake build output (not committed)
+    └── logparse(.exe)     ← Built binary
 ```
 
 ---
@@ -133,27 +149,30 @@ When Claude Code encounters a build failure, follow this sequence:
 **Output format:**
 
 ```
-[LOGPARSE] mode: zephyr | 12,847 lines → 340 lines (97.4% reduction)
-[STATS] 14 unique repeated patterns | 3 error blocks | 2 warning cascades
-[STATS] Build phases detected: cmake, kconfig, devicetree, compilation, linking
+[LOGPARSE] mode: zephyr | 12,847 lines -> ~340 lines (97.4% reduction)
+[SOURCE] build.log
+[STATS] 3 errors | 2 warnings
 
-[FREQ ×94] warning: unused variable 'ctx' in sensor_hub.c
-[FREQ ×31] note: in expansion of macro 'DT_INST_FOREACH_STATUS_OKAY'
-[FREQ ×2]  warning: overflow in implicit constant conversion
+  Board: xiao_ble, qualifiers: nrf52840/sense | Zephyr 4.2.99 | GNU 12.2.0
+  Overlay: boards/xiao_ble_nrf52840_sense.overlay
+  Build: FAILED at step 56/203
 
-[SEGMENT: devicetree-error] lines 2041-2087
-/home/adrian/project/build/zephyr/zephyr.dts:847:
+[FREQ x94] warning: unused variable 'ctx' in sensor_hub.c
+
+[error]
+  /home/adrian/project/build/zephyr/zephyr.dts:847:
   node '/soc/i2c@40003000/sensor@44' depends on undefined node 'ord,3'
-  ... full block preserved ...
 
-[SEGMENT: linker-map] lines 8822-8830
-Memory region         Used    Size   %Used
-  FLASH:            248312  1048576  23.68%
-  RAM:               65432   262144  24.96%
+[error]
+  src/main.c:40:30: error: 'STRIP_NUM_PIXELS' undeclared here (not in a function)
+     40 | static struct led_rgb pixels[STRIP_NUM_PIXELS];
 
-[TAIL: last 20 lines]
-... final build output ...
+[warning]
+  src/main.c:196:32: warning: implicit conversion from 'float' to 'double' [-Wdouble-promotion]
+  ... repeated 5 more times
 ```
+
+**Output philosophy:** The output is language-native — raw compiler/build diagnostics with noise stripped. No JSON, no structured tags, no `@KEY=value`. The model has seen GCC output ten million times; that's the representation it reasons fastest over. Caret/underline lines (`^~~~~`) are dropped (the column number in the diagnostic is sufficient). SDK include chains are elided to just the user's source file reference.
 
 **Flags:**
 
@@ -167,6 +186,8 @@ Memory region         Used    Size   %Used
 | `--json` | Output as JSON for piping to other tools |
 | `--help` | Human help |
 | `--help agent` | Machine-readable self-update instructions |
+
+**Note:** There is no `--schema` flag. The default text output *is* the LLM-friendly format — language-native compiler output that directly activates the model's diagnostic reasoning, without the "grep tax" of structured data formats.
 
 ---
 
@@ -395,23 +416,22 @@ TO REGISTER A NEW LOG FORMAT:
 
 ### Language & Dependencies
 
-- **Python 3.10+**, stdlib only for core functionality
-- No external dependencies for `logparse` and `logexplore`
-- `logfix` uses `pyyaml` for fix entry parsing (or stdlib `json` if YAML is unavailable — fix entries can be JSON as fallback)
-- `tomllib` (stdlib in 3.11+) for mode files. For 3.10, `tomli` as fallback.
+- **C11**, zero external dependencies (tiny-regex-c vendored)
+- Hand-rolled TOML parser for mode files, YAML parser for fix database
+- Builds with CMake + Ninja on Windows (MSVC/GCC), Linux, and macOS
 
 ### Performance Targets
 
-- `logparse` should handle a 50,000-line log in under 2 seconds
-- Memory: stream the log, don't load it all at once for files over 100MB
-- The frequency hash table is the main memory consumer — that's fine
+- `logparse` should handle a 50,000-line log in under 1 second
+- Memory: reads all lines into memory (practical for build logs up to ~100MB)
+- The FNV-1a dedup hash table is the main memory consumer — that's fine
 
 ### Testing Strategy
 
-- `tests/sample-logs/` contains real log snippets (sanitized of paths/secrets)
+- `tests/sample-logs/` and `test_programs/` contain real log snippets
 - Each mode should have at least one sample log and expected output
-- `test_logparse.py` runs each sample through its mode and validates: line reduction ratio, presence of key error segments, correct frequency counts
-- Claude Code should run tests after modifying any tool or mode
+- 18 CTest integration tests validate: line reduction ratio, presence of key error segments, correct frequency counts
+- Claude Code should run `ctest` after modifying any tool or mode
 
 ---
 
@@ -430,11 +450,9 @@ If the tools don't exist yet, Claude Code should build them from this specificat
 7. Add sample logs and tests
 8. Run the test suite
 
-**Each tool should be a single Python file in `bin/`.** Keep it simple. If a tool grows beyond 500 lines, that's a smell — split parsing primitives into a shared `lib/` module.
+**Architecture:** Three executables (`logparse`, `logexplore`, `logfix`) sharing a common `lib/` of 8 modules. Built as native C binaries — no runtime dependencies.
 
-Make all tools executable: `chmod +x bin/logparse bin/logexplore bin/logfix`
-
-Use shebangs: `#!/usr/bin/env python3`
+**Line fate model:** The `[elision]` section in mode TOML files controls what survives. Three tiers: `drop_contains` (silent removal — build boilerplate, include chains), `keep_once_contains` (emit once in summary — board, SDK version), and implicit KEEP (everything else). Caret/underline lines from GCC source context are always dropped. Within error/warning segments, repeated diagnostics with the same `-Wflag` are collapsed to first instance + count.
 
 ---
 

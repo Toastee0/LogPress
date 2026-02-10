@@ -117,7 +117,6 @@ In file included from C:/ncs/v3.2.1/zephyr/include/zephyr/toolchain/gcc.h:98,
                  from C:/ncs/v3.2.1/zephyr/include/zephyr/sys/iterable_sections.h:10,
                  from C:/ncs/v3.2.1/zephyr/include/zephyr/logging/log_instance.h:10,
                  from C:/ncs/v3.2.1/zephyr/include/zephyr/logging/log.h:10,
- ***we only care about this line in the in file inclded from block:
                  from M:/nrfprojects/led_strip/src/main.c:13:
 
 C:/ncs/v3.2.1/zephyr/include/zephyr/device.h:96:41: error: '__device_dts_ord_DT_N_ALIAS_led_strip_ORD' undeclared here (not in a function)
